@@ -459,8 +459,12 @@ export function TranslatorDemo({ isAuthenticated }: { isAuthenticated: boolean }
     rec.start();
   }, [stopListening, translateInterim, translateSegment]);
 
-  // ---- Server STT (OpenAI Whisper): record short clips, transcribe, translate ----
-  const RECORD_MS = 4000;
+  // ---- Server STT (OpenAI Whisper): record utterances (cut on pause), transcribe, translate ----
+  const MONITOR_MS = 100;
+  const SPEECH_RMS = 0.025;
+  const SILENCE_HOLD_MS = 800; // trailing pause that ends an utterance
+  const MAX_SEG_MS = 15000; // hard cap so a long monologue still flushes
+  const FIXED_FALLBACK_MS = 4000; // fixed clip length when VAD is unavailable
 
   const transcribeAndTranslate = useCallback(
     async (blob: Blob) => {
@@ -494,35 +498,45 @@ export function TranslatorDemo({ isAuthenticated }: { isAuthenticated: boolean }
     mr.ondataavailable = (e) => {
       if (e.data.size) chunks.push(e.data);
     };
-    // Voice-activity detection: only keep the clip if it actually contains speech,
-    // so silent gaps aren't sent to Whisper (which hallucinates stock phrases like
-    // "Дякую за перегляд!" / "Thanks for watching" on silence).
+    // Silence-based segmentation: keep recording until the speaker pauses, then
+    // cut — so clips break at natural sentence boundaries instead of mid-word.
+    // Also gates out silence (Whisper hallucinates stock phrases on silent audio).
     const analyser = analyserRef.current;
     const buf = analyser ? new Uint8Array(analyser.fftSize) : null;
-    // Fail open: if VAD is unavailable, send the clip anyway and let the server
-    // hallucination filter guard against silence. Otherwise VAD gates on energy.
-    let sawSpeech = !analyser;
-    const vad = setInterval(() => {
-      if (!analyser || !buf) return;
-      analyser.getByteTimeDomainData(buf);
-      let sum = 0;
-      for (let i = 0; i < buf.length; i++) {
-        const v = (buf[i] - 128) / 128;
-        sum += v * v;
+    let hadSpeech = !analyser; // fail open: no VAD → treat as speech, use a fixed cut
+    let silenceMs = 0;
+    let segMs = 0;
+    const monitor = setInterval(() => {
+      segMs += MONITOR_MS;
+      let cut = false;
+      if (analyser && buf) {
+        analyser.getByteTimeDomainData(buf);
+        let sum = 0;
+        for (let i = 0; i < buf.length; i++) {
+          const v = (buf[i] - 128) / 128;
+          sum += v * v;
+        }
+        if (Math.sqrt(sum / buf.length) > SPEECH_RMS) {
+          hadSpeech = true;
+          silenceMs = 0;
+        } else if (hadSpeech) {
+          silenceMs += MONITOR_MS;
+        }
+        if (hadSpeech && silenceMs >= SILENCE_HOLD_MS) cut = true; // pause → end of utterance
+        if (segMs >= MAX_SEG_MS) cut = true; // safety cap
+      } else if (segMs >= FIXED_FALLBACK_MS) {
+        cut = true; // no VAD: fall back to fixed-length clips
       }
-      if (Math.sqrt(sum / buf.length) > 0.025) sawSpeech = true;
-    }, 100);
+      if (cut && mr.state !== "inactive") mr.stop();
+    }, MONITOR_MS);
     mr.onstop = () => {
-      clearInterval(vad);
+      clearInterval(monitor);
       const blob = new Blob(chunks, { type: mr.mimeType || "audio/webm" });
-      if (sawSpeech && blob.size > 1200) void transcribeAndTranslate(blob);
+      if (hadSpeech && blob.size > 1200) void transcribeAndTranslate(blob);
       if (listeningRef.current) cycleRecord();
     };
     mediaRecorderRef.current = mr;
     mr.start();
-    setTimeout(() => {
-      if (mr.state !== "inactive") mr.stop();
-    }, RECORD_MS);
   }, [transcribeAndTranslate]);
 
   const startServerListening = useCallback(async () => {
@@ -701,7 +715,7 @@ export function TranslatorDemo({ isAuthenticated }: { isAuthenticated: boolean }
                     ? `auto · ${LANG_LABEL[detectedLang]}`
                     : "auto-detecting…"
                   : LANG_LABEL[sourceLang]
-              }) → ${LANG_LABEL[targetLang]}… ${engine === "server" ? "speak in short phrases" : "speak naturally"}`
+              }) → ${LANG_LABEL[targetLang]}… ${engine === "server" ? "speak naturally, pause between sentences" : "speak naturally"}`
             : engine === "browser" && !speechSupported
               ? "Live recognition isn't supported here — switch to ☁️ Whisper below, or type."
               : "Tap to speak"}
