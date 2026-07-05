@@ -131,9 +131,9 @@ export function EvalRunner() {
 
   return (
     <div className="space-y-4">
-      <div className="bg-white rounded-xl border border-slate-200 p-4 space-y-3">
+      <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-4 space-y-3">
         <h2 className="font-semibold">Translation quality (chrF + LLM judge)</h2>
-        <p className="text-sm text-slate-500">
+        <p className="text-sm text-slate-500 dark:text-slate-400">
           Runs the built-in DE→UK / EN→UK sentence set through the selected models. Scores each output
           with chrF against a reference translation; optionally an LLM judge rates adequacy 1–5.
         </p>
@@ -145,8 +145,8 @@ export function EvalRunner() {
                 !m.enabled
                   ? "opacity-40 cursor-not-allowed"
                   : selected.has(m.id)
-                    ? "border-indigo-400 bg-indigo-50"
-                    : "border-slate-200"
+                    ? "border-indigo-400 dark:border-indigo-500 bg-indigo-50 dark:bg-indigo-950"
+                    : "border-slate-200 dark:border-slate-700"
               }`}
             >
               <input
@@ -160,7 +160,7 @@ export function EvalRunner() {
           ))}
         </div>
         <div className="flex items-center gap-4">
-          <label className="flex items-center gap-2 text-sm text-slate-600">
+          <label className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
             <input type="checkbox" checked={useJudge} onChange={(e) => setUseJudge(e.target.checked)} />
             LLM-as-judge scoring (slower)
           </label>
@@ -172,16 +172,16 @@ export function EvalRunner() {
             {running ? `Running… ${progress.done}/${progress.total || "…"}` : "Run eval"}
           </button>
         </div>
-        {error && <p className="text-sm text-red-600">{error}</p>}
+        {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
       </div>
 
       {summary && (
-        <div className="bg-white rounded-xl border border-slate-200 p-4">
+        <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-4">
           <h3 className="font-semibold mb-3">Summary</h3>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="text-left text-slate-400 border-b border-slate-100">
+                <tr className="text-left text-slate-400 dark:text-slate-500 border-b border-slate-100 dark:border-slate-700">
                   <th className="py-2 pr-4">Model</th>
                   <th className="py-2 pr-4">avg chrF</th>
                   <th className="py-2 pr-4">avg judge (1–5)</th>
@@ -193,7 +193,7 @@ export function EvalRunner() {
                 {Object.entries(summary)
                   .sort(([, a], [, b]) => (b.avgChrf ?? 0) - (a.avgChrf ?? 0))
                   .map(([model, s]) => (
-                    <tr key={model} className="border-b border-slate-50">
+                    <tr key={model} className="border-b border-slate-50 dark:border-slate-700">
                       <td className="py-2 pr-4 font-medium">{modelLabel(model)}</td>
                       <td className="py-2 pr-4">{s.avgChrf ?? "—"}</td>
                       <td className="py-2 pr-4">{s.avgJudge ?? "—"}</td>
@@ -208,12 +208,12 @@ export function EvalRunner() {
       )}
 
       {results.length > 0 && (
-        <div className="bg-white rounded-xl border border-slate-200 p-4">
+        <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-4">
           <h3 className="font-semibold mb-3">Per-item results</h3>
           <div className="overflow-x-auto max-h-96 overflow-y-auto">
             <table className="w-full text-xs">
-              <thead className="sticky top-0 bg-white">
-                <tr className="text-left text-slate-400 border-b border-slate-100">
+              <thead className="sticky top-0 bg-white dark:bg-slate-800">
+                <tr className="text-left text-slate-400 dark:text-slate-500 border-b border-slate-100 dark:border-slate-700">
                   <th className="py-2 pr-3">Model</th>
                   <th className="py-2 pr-3">Source</th>
                   <th className="py-2 pr-3">Output</th>
@@ -224,11 +224,11 @@ export function EvalRunner() {
               </thead>
               <tbody>
                 {results.map((r, i) => (
-                  <tr key={i} className="border-b border-slate-50 align-top">
+                  <tr key={i} className="border-b border-slate-50 dark:border-slate-700 align-top">
                     <td className="py-2 pr-3 whitespace-nowrap">{modelLabel(r.model)}</td>
                     <td className="py-2 pr-3">{r.source}</td>
-                    <td className="py-2 pr-3">{r.error ? <span className="text-red-500">{r.error}</span> : r.output}</td>
-                    <td className="py-2 pr-3 text-slate-400">{r.reference}</td>
+                    <td className="py-2 pr-3">{r.error ? <span className="text-red-500 dark:text-red-400">{r.error}</span> : r.output}</td>
+                    <td className="py-2 pr-3 text-slate-400 dark:text-slate-500">{r.reference}</td>
                     <td className="py-2 pr-3">{r.chrf ?? "—"}</td>
                     <td className="py-2">{r.judgeScore ?? "—"}</td>
                   </tr>
@@ -240,7 +240,7 @@ export function EvalRunner() {
       )}
 
       {pastRuns.length > 0 && (
-        <div className="bg-white rounded-xl border border-slate-200 p-4">
+        <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-4">
           <h3 className="font-semibold mb-3">Past runs</h3>
           <div className="space-y-2 text-sm">
             {pastRuns.map((r) => {
@@ -251,14 +251,14 @@ export function EvalRunner() {
                 /* legacy row */
               }
               return (
-                <div key={r.id} className="border border-slate-100 rounded-lg p-3">
-                  <div className="text-xs text-slate-400 mb-1">
+                <div key={r.id} className="border border-slate-100 dark:border-slate-700 rounded-lg p-3">
+                  <div className="text-xs text-slate-400 dark:text-slate-500 mb-1">
                     {new Date(r.created_at).toLocaleString()}
                   </div>
                   {parsed.perModel ? (
                     <div className="flex flex-wrap gap-3">
                       {Object.entries(parsed.perModel).map(([model, s]) => (
-                        <span key={model} className="text-slate-600">
+                        <span key={model} className="text-slate-600 dark:text-slate-300">
                           <span className="font-medium">{modelLabel(model)}</span>: chrF {s.avgChrf ?? "—"}
                           {s.avgJudge != null && ` · judge ${s.avgJudge}`}
                           {s.avgLatencyMs != null && ` · ${s.avgLatencyMs} ms`}
@@ -266,7 +266,7 @@ export function EvalRunner() {
                       ))}
                     </div>
                   ) : (
-                    <span className="text-slate-400">in progress / incomplete</span>
+                    <span className="text-slate-400 dark:text-slate-500">in progress / incomplete</span>
                   )}
                 </div>
               );

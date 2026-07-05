@@ -277,8 +277,8 @@ export function TranslatorDemo({ isAuthenticated }: { isAuthenticated: boolean }
   return (
     <div className="space-y-4">
       {/* Controls */}
-      <div className="flex flex-wrap items-center gap-3 bg-white rounded-xl border border-slate-200 p-4">
-        <div className="flex rounded-lg overflow-hidden border border-slate-300" role="group" aria-label="Source language">
+      <div className="flex flex-wrap items-center gap-3 bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-4">
+        <div className="flex rounded-lg overflow-hidden border border-slate-300 dark:border-slate-700" role="group" aria-label="Source language">
           {(["de", "en"] as SourceLang[]).map((lang) => (
             <button
               key={lang}
@@ -289,20 +289,20 @@ export function TranslatorDemo({ isAuthenticated }: { isAuthenticated: boolean }
                 }
               }}
               className={`px-4 py-2 text-sm font-medium ${
-                sourceLang === lang ? "bg-indigo-600 text-white" : "bg-white text-slate-600 hover:bg-slate-50"
+                sourceLang === lang ? "bg-indigo-600 text-white" : "bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/50"
               }`}
             >
               {lang === "de" ? "🇩🇪 German" : "🇬🇧 English"}
             </button>
           ))}
         </div>
-        <span className="text-slate-400">→</span>
-        <span className="px-4 py-2 text-sm font-medium bg-slate-100 rounded-lg">🇺🇦 Ukrainian</span>
+        <span className="text-slate-400 dark:text-slate-500">→</span>
+        <span className="px-4 py-2 text-sm font-medium bg-slate-100 dark:bg-slate-800 rounded-lg">🇺🇦 Ukrainian</span>
 
         <select
           value={model}
           onChange={(e) => setModel(e.target.value)}
-          className="ml-auto rounded-lg border border-slate-300 px-3 py-2 text-sm bg-white min-w-56"
+          className="ml-auto rounded-lg border border-slate-300 dark:border-slate-700 px-3 py-2 text-sm bg-white dark:bg-slate-800 min-w-56"
           aria-label="Translation model"
         >
           {models.map((m) => (
@@ -316,7 +316,7 @@ export function TranslatorDemo({ isAuthenticated }: { isAuthenticated: boolean }
       </div>
 
       {enabledCount === 0 && models.length > 0 && (
-        <div className="rounded-lg bg-amber-50 border border-amber-200 text-amber-800 text-sm px-4 py-3">
+        <div className="rounded-lg bg-amber-50 dark:bg-amber-950 border border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-200 text-sm px-4 py-3">
           No model API keys configured. Add <code>CEREBRAS_API_KEY</code>, <code>GROQ_API_KEY</code>,{" "}
           <code>GOOGLE_AI_API_KEY</code> or <code>OPENAI_API_KEY</code> to <code>.env</code> to enable translation.
         </div>
@@ -334,14 +334,14 @@ export function TranslatorDemo({ isAuthenticated }: { isAuthenticated: boolean }
         >
           {listening ? "■" : "🎙️"}
         </button>
-        <p className="text-sm text-slate-500">
+        <p className="text-sm text-slate-500 dark:text-slate-400">
           {listening
             ? `Listening in ${sourceLang === "de" ? "German" : "English"}… speak naturally`
             : speechSupported
               ? "Tap to speak"
               : "Speech recognition is not supported in this browser — use the text box below (Chrome/Edge recommended)."}
         </p>
-        {statusMsg && <p className="text-sm text-red-600">{statusMsg}</p>}
+        {statusMsg && <p className="text-sm text-red-600 dark:text-red-400">{statusMsg}</p>}
       </div>
 
       {/* Typed fallback */}
@@ -350,7 +350,7 @@ export function TranslatorDemo({ isAuthenticated }: { isAuthenticated: boolean }
           value={typedText}
           onChange={(e) => setTypedText(e.target.value)}
           placeholder={`Or type ${sourceLang === "de" ? "German" : "English"} text and press Enter…`}
-          className="flex-1 rounded-lg border border-slate-300 px-4 py-2.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          className="flex-1 rounded-lg border border-slate-300 dark:border-slate-700 px-4 py-2.5 text-sm bg-white dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500"
         />
         <button
           type="submit"
@@ -363,28 +363,28 @@ export function TranslatorDemo({ isAuthenticated }: { isAuthenticated: boolean }
 
       {/* Transcript panes */}
       <div className="grid md:grid-cols-2 gap-4">
-        <div className="bg-white rounded-xl border border-slate-200 p-4 min-h-48">
-          <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-3">
+        <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-4 min-h-48">
+          <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500 mb-3">
             {sourceLang === "de" ? "German" : "English"} (heard)
           </h2>
-          <div className="space-y-2 text-slate-800">
+          <div className="space-y-2 text-slate-800 dark:text-slate-100">
             {segments.map((s) => (
               <p key={s.id}>{s.source}</p>
             ))}
-            {interim && <p className="text-slate-400 italic">{interim}</p>}
+            {interim && <p className="text-slate-400 dark:text-slate-500 italic">{interim}</p>}
             {segments.length === 0 && !interim && (
-              <p className="text-slate-300 text-sm">Your speech will appear here…</p>
+              <p className="text-slate-300 dark:text-slate-600 text-sm">Your speech will appear here…</p>
             )}
           </div>
         </div>
-        <div className="bg-white rounded-xl border border-slate-200 p-4 min-h-48">
-          <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-3">Ukrainian</h2>
-          <div className="space-y-2 text-slate-800">
+        <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-4 min-h-48">
+          <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500 mb-3">Ukrainian</h2>
+          <div className="space-y-2 text-slate-800 dark:text-slate-100">
             {segments.map((s) => (
               <div key={s.id} className="group flex items-start gap-2">
                 <p className="flex-1">
                   {s.error ? (
-                    <span className="text-red-500 text-sm">⚠ {s.error}</span>
+                    <span className="text-red-500 dark:text-red-400 text-sm">⚠ {s.error}</span>
                   ) : (
                     <>
                       {s.target}
@@ -395,11 +395,11 @@ export function TranslatorDemo({ isAuthenticated }: { isAuthenticated: boolean }
                 {!s.streaming && s.target && (
                   <span className="flex items-center gap-2 shrink-0">
                     {s.latencyMs !== null && (
-                      <span className="text-[10px] text-slate-400 whitespace-nowrap">{s.latencyMs} ms</span>
+                      <span className="text-[10px] text-slate-400 dark:text-slate-500 whitespace-nowrap">{s.latencyMs} ms</span>
                     )}
                     <button
                       onClick={() => speak(s.target)}
-                      className="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-indigo-600"
+                      className="opacity-0 group-hover:opacity-100 text-slate-400 dark:text-slate-500 hover:text-indigo-600 dark:hover:text-indigo-400"
                       title="Speak (dubbing preview)"
                       aria-label="Speak translation"
                     >
@@ -409,16 +409,16 @@ export function TranslatorDemo({ isAuthenticated }: { isAuthenticated: boolean }
                 )}
               </div>
             ))}
-            {liveTranslation && <p className="text-slate-400 italic">{liveTranslation}</p>}
+            {liveTranslation && <p className="text-slate-400 dark:text-slate-500 italic">{liveTranslation}</p>}
             {segments.length === 0 && !liveTranslation && (
-              <p className="text-slate-300 text-sm">Переклад з’явиться тут…</p>
+              <p className="text-slate-300 dark:text-slate-600 text-sm">Переклад з’явиться тут…</p>
             )}
           </div>
         </div>
       </div>
 
       {/* Footer controls */}
-      <div className="flex items-center justify-between text-sm text-slate-500">
+      <div className="flex items-center justify-between text-sm text-slate-500 dark:text-slate-400">
         <label className="flex items-center gap-2">
           <input
             type="checkbox"
@@ -430,7 +430,7 @@ export function TranslatorDemo({ isAuthenticated }: { isAuthenticated: boolean }
           Save to history{!isAuthenticated && " (sign in with GitHub to enable)"}
         </label>
         {segments.length > 0 && (
-          <button onClick={clearAll} className="text-slate-400 hover:text-red-500">
+          <button onClick={clearAll} className="text-slate-400 dark:text-slate-500 hover:text-red-500 dark:hover:text-red-400">
             Clear session
           </button>
         )}
