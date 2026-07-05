@@ -1,22 +1,28 @@
 import { getModel, PROVIDERS, type ModelSpec } from "./models";
 
-export type SourceLang = "auto" | "de" | "en";
+export type Lang = "de" | "en" | "uk";
+export type SourceLang = "auto" | Lang;
 
-const LANG_NAMES: Record<SourceLang, string> = {
-  auto: "German or English",
+const LANG_NAMES: Record<Lang, string> = {
   de: "German",
   en: "English",
+  uk: "Ukrainian",
 };
 
-export function translationSystemPrompt(sourceLang: SourceLang): string {
-  return [
-    `You are a professional simultaneous interpreter translating spoken ${LANG_NAMES[sourceLang]} into Ukrainian.`,
-    "Rules:",
-    "- Output ONLY the Ukrainian translation. No comments, no quotes, no explanations.",
+export function translationSystemPrompt(sourceLang: SourceLang, targetLang: Lang = "uk"): string {
+  const target = LANG_NAMES[targetLang];
+  const source =
     sourceLang === "auto"
-      ? "- The input may be German or English; detect the source language automatically and translate it into Ukrainian."
+      ? "the source language (German, English, or Ukrainian)"
+      : LANG_NAMES[sourceLang];
+  return [
+    `You are a professional simultaneous interpreter translating spoken ${source} into ${target}.`,
+    "Rules:",
+    `- Output ONLY the ${target} translation. No comments, no quotes, no explanations.`,
+    sourceLang === "auto"
+      ? `- Detect the source language automatically, then translate it into ${target}.`
       : null,
-    "- Preserve the speaker's tone and register; keep it natural spoken Ukrainian.",
+    "- Preserve the speaker's tone and register; keep it natural and idiomatic.",
     "- The input comes from live speech recognition: it may be a sentence fragment. Translate the fragment as-is without completing it.",
     "- Keep names, numbers and units accurate.",
   ]

@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server";
-import { streamChat, translationSystemPrompt, type SourceLang } from "@/lib/translate";
+import { streamChat, translationSystemPrompt, type SourceLang, type Lang } from "@/lib/translate";
 import { getModel, isModelEnabled } from "@/lib/models";
 
 export const dynamic = "force-dynamic";
@@ -10,7 +10,7 @@ export const dynamic = "force-dynamic";
  * Streams the Ukrainian translation as plain text chunks.
  */
 export async function POST(req: NextRequest) {
-  let body: { text?: string; sourceLang?: string; model?: string };
+  let body: { text?: string; sourceLang?: string; targetLang?: string; model?: string };
   try {
     body = await req.json();
   } catch {
@@ -19,7 +19,15 @@ export async function POST(req: NextRequest) {
 
   const text = (body.text ?? "").trim();
   const sourceLang: SourceLang =
-    body.sourceLang === "de" ? "de" : body.sourceLang === "en" ? "en" : "auto";
+    body.sourceLang === "de"
+      ? "de"
+      : body.sourceLang === "en"
+        ? "en"
+        : body.sourceLang === "uk"
+          ? "uk"
+          : "auto";
+  const targetLang: Lang =
+    body.targetLang === "de" ? "de" : body.targetLang === "en" ? "en" : "uk";
   const modelId = body.model ?? "";
 
   if (!text) return new Response("Missing text", { status: 400 });
@@ -38,7 +46,7 @@ export async function POST(req: NextRequest) {
         for await (const delta of streamChat(
           modelId,
           [
-            { role: "system", content: translationSystemPrompt(sourceLang) },
+            { role: "system", content: translationSystemPrompt(sourceLang, targetLang) },
             { role: "user", content: text },
           ],
           { signal: req.signal }
