@@ -2,8 +2,9 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
-type SourceLang = "auto" | "de" | "en";
-type DetectedLang = "de" | "en";
+type Lang = "de" | "en" | "uk";
+type SourceLang = "auto" | Lang;
+type DetectedLang = Lang;
 
 interface ModelInfo {
   id: string;
@@ -22,11 +23,17 @@ interface Segment {
   error?: string;
 }
 
-const SPEECH_LANG: Record<DetectedLang, string> = { de: "de-DE", en: "en-US" };
+const SPEECH_LANG: Record<Lang, string> = { de: "de-DE", en: "en-US", uk: "uk-UA" };
+const LANG_LABEL: Record<Lang, string> = { de: "German", en: "English", uk: "Ukrainian" };
+const LANG_FLAG: Record<SourceLang, string> = { auto: "🌐", de: "🇩🇪", en: "🇬🇧", uk: "🇺🇦" };
 
-/** Lightweight German-vs-English heuristic for adaptive speech recognition. */
+const SOURCE_OPTIONS: SourceLang[] = ["auto", "de", "en", "uk"];
+const TARGET_OPTIONS: Lang[] = ["uk", "de", "en"];
+
+/** Lightweight source-language heuristic for adaptive speech recognition. */
 function detectLang(text: string): DetectedLang | null {
   const t = text.toLowerCase();
+  if (/[Ѐ-ӿ]/.test(t)) return "uk"; // Cyrillic → Ukrainian
   if (/[äöüß]/.test(t)) return "de";
   const de = (
     t.match(
@@ -43,17 +50,16 @@ function detectLang(text: string): DetectedLang | null {
   return null;
 }
 
-function pickUkVoice(): SpeechSynthesisVoice | null {
+function pickVoice(lang: Lang): SpeechSynthesisVoice | null {
   if (typeof window === "undefined" || !window.speechSynthesis) return null;
-  return (
-    window.speechSynthesis.getVoices().find((v) => v.lang?.toLowerCase().startsWith("uk")) ?? null
-  );
+  const prefix = SPEECH_LANG[lang].slice(0, 2).toLowerCase();
+  return window.speechSynthesis.getVoices().find((v) => v.lang?.toLowerCase().startsWith(prefix)) ?? null;
 }
 
-function makeUkUtterance(text: string): SpeechSynthesisUtterance {
+function makeUtterance(text: string, lang: Lang): SpeechSynthesisUtterance {
   const u = new SpeechSynthesisUtterance(text);
-  u.lang = "uk-UA";
-  const v = pickUkVoice();
+  u.lang = SPEECH_LANG[lang];
+  const v = pickVoice(lang);
   if (v) u.voice = v;
   return u;
 }
@@ -65,6 +71,7 @@ export function TranslatorDemo({ isAuthenticated }: { isAuthenticated: boolean }
   const [models, setModels] = useState<ModelInfo[]>([]);
   const [model, setModel] = useState("");
   const [sourceLang, setSourceLang] = useState<SourceLang>("auto");
+  const [targetLang, setTargetLang] = useState<Lang>("uk");
   const [detectedLang, setDetectedLang] = useState<DetectedLang | null>(null);
   const [autoSpeak, setAutoSpeak] = useState(false);
   const [listening, setListening] = useState(false);
@@ -82,12 +89,14 @@ export function TranslatorDemo({ isAuthenticated }: { isAuthenticated: boolean }
   const liveDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const listeningRef = useRef(false);
   const langRef = useRef(sourceLang);
+  const targetRef = useRef(targetLang);
   const modelRef = useRef(model);
   const autoSpeakRef = useRef(autoSpeak);
   const sttLangRef = useRef<DetectedLang>("en");
-  const speechQueueRef = useRef<string[]>([]);
+  const speechQueueRef = useRef<{ text: string; lang: Lang }[]>([]);
   const speakingRef = useRef(false);
   langRef.current = sourceLang;
+  targetRef.current = targetLang;
   modelRef.current = model;
   autoSpeakRef.current = autoSpeak;
 
@@ -119,13 +128,13 @@ export function TranslatorDemo({ isAuthenticated }: { isAuthenticated: boolean }
     return () => window.speechSynthesis.removeEventListener("voiceschanged", warm);
   }, []);
 
-  // ---- Ukrainian voice playback (queued so segments don't talk over each other) ----
+  // ---- Target-language voice playback (queued so segments don't talk over each other) ----
   const drainSpeechQueue = useCallback(() => {
     if (speakingRef.current || typeof window === "undefined" || !window.speechSynthesis) return;
     const next = speechQueueRef.current.shift();
     if (!next) return;
     speakingRef.current = true;
-    const u = makeUkUtterance(next);
+    const u = makeUtterance(next.text, next.lang);
     u.onend = () => {
       speakingRef.current = false;
       drainSpeechQueue();
@@ -138,9 +147,9 @@ export function TranslatorDemo({ isAuthenticated }: { isAuthenticated: boolean }
   }, []);
 
   const enqueueSpeak = useCallback(
-    (text: string) => {
+    (text: string, lang: Lang) => {
       if (typeof window === "undefined" || !window.speechSynthesis || !text.trim()) return;
-      speechQueueRef.current.push(text);
+      speechQueueRef.current.push({ text, lang });
       drainSpeechQueue();
     },
     [drainSpeechQueue]
@@ -156,13 +165,12 @@ export function TranslatorDemo({ isAuthenticated }: { isAuthenticated: boolean }
     if (!isAuthenticated || !saveHistory) return null;
     if (conversationIdRef.current) return conversationIdRef.current;
     try {
+      const src = langRef.current === "auto" ? "Auto" : LANG_LABEL[langRef.current];
       const res = await fetch("/api/conversations", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          title: `${
-            langRef.current === "de" ? "German" : langRef.current === "en" ? "English" : "Auto"
-          } → Ukrainian · ${new Date().toLocaleString()}`,
+          title: `${src} → ${LANG_LABEL[targetRef.current]} · ${new Date().toLocaleString()}`,
           sourceLang: langRef.current,
           model: modelRef.current,
         }),
@@ -199,15 +207,21 @@ export function TranslatorDemo({ isAuthenticated }: { isAuthenticated: boolean }
   const translateSegment = useCallback(
     async (source: string) => {
       const id = nextSegmentId();
+      const target = targetRef.current;
       setSegments((prev) => [...prev, { id, source, target: "", latencyMs: null, streaming: true }]);
       const started = performance.now();
       let firstToken: number | null = null;
-      let target = "";
+      let out = "";
       try {
         const res = await fetch("/api/translate", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ text: source, sourceLang: langRef.current, model: modelRef.current }),
+          body: JSON.stringify({
+            text: source,
+            sourceLang: langRef.current,
+            targetLang: target,
+            model: modelRef.current,
+          }),
         });
         if (!res.ok || !res.body) throw new Error(await res.text());
         const reader = res.body.getReader();
@@ -216,15 +230,15 @@ export function TranslatorDemo({ isAuthenticated }: { isAuthenticated: boolean }
           const { done, value } = await reader.read();
           if (done) break;
           if (firstToken === null) firstToken = performance.now() - started;
-          target += decoder.decode(value, { stream: true });
-          setSegments((prev) => prev.map((s) => (s.id === id ? { ...s, target } : s)));
+          out += decoder.decode(value, { stream: true });
+          setSegments((prev) => prev.map((s) => (s.id === id ? { ...s, target: out } : s)));
         }
         const latencyMs = Math.round(firstToken ?? performance.now() - started);
-        const finished: Segment = { id, source, target, latencyMs, streaming: false };
+        const finished: Segment = { id, source, target: out, latencyMs, streaming: false };
         setSegments((prev) => prev.map((s) => (s.id === id ? finished : s)));
-        if (target) {
+        if (out) {
           void saveMessage(finished);
-          if (autoSpeakRef.current) enqueueSpeak(target);
+          if (autoSpeakRef.current) enqueueSpeak(out, target);
         }
       } catch (err) {
         const message = err instanceof Error ? err.message : "Translation failed";
@@ -251,7 +265,12 @@ export function TranslatorDemo({ isAuthenticated }: { isAuthenticated: boolean }
         const res = await fetch("/api/translate", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ text, sourceLang: langRef.current, model: modelRef.current }),
+          body: JSON.stringify({
+            text,
+            sourceLang: langRef.current,
+            targetLang: targetRef.current,
+            model: modelRef.current,
+          }),
           signal: controller.signal,
         });
         if (!res.ok || !res.body) return;
@@ -369,15 +388,19 @@ export function TranslatorDemo({ isAuthenticated }: { isAuthenticated: boolean }
   const speak = (text: string) => {
     if (typeof window === "undefined" || !window.speechSynthesis || !text.trim()) return;
     stopSpeaking();
-    window.speechSynthesis.speak(makeUkUtterance(text));
+    window.speechSynthesis.speak(makeUtterance(text, targetRef.current));
+  };
+
+  const resetSttLang = () => {
+    sttLangRef.current = "en";
+    setDetectedLang(null);
   };
 
   const clearAll = () => {
     setSegments([]);
     setInterim("");
     setLiveTranslation("");
-    setDetectedLang(null);
-    sttLangRef.current = "en";
+    resetSttLang();
     conversationIdRef.current = null;
     stopSpeaking();
   };
@@ -387,38 +410,48 @@ export function TranslatorDemo({ isAuthenticated }: { isAuthenticated: boolean }
   const heardLabel =
     sourceLang === "auto"
       ? detectedLang
-        ? `${detectedLang === "de" ? "German" : "English"} · auto`
+        ? `${LANG_LABEL[detectedLang]} · auto`
         : "Source · auto"
-      : sourceLang === "de"
-        ? "German"
-        : "English";
+      : LANG_LABEL[sourceLang];
 
   return (
     <div className="space-y-4">
       {/* Controls */}
       <div className="flex flex-wrap items-center gap-3 bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-4">
         <div className="flex rounded-lg overflow-hidden border border-slate-300 dark:border-slate-700" role="group" aria-label="Source language">
-          {(["auto", "de", "en"] as SourceLang[]).map((lang) => (
+          {SOURCE_OPTIONS.map((lang) => (
             <button
               key={lang}
               onClick={() => {
                 setSourceLang(lang);
-                setDetectedLang(null);
-                sttLangRef.current = "en";
-                if (listening) {
-                  stopListening();
-                }
+                resetSttLang();
+                if (listening) stopListening();
               }}
-              className={`px-4 py-2 text-sm font-medium ${
+              className={`px-3 py-2 text-sm font-medium ${
                 sourceLang === lang ? "bg-indigo-600 text-white" : "bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/50"
               }`}
             >
-              {lang === "auto" ? "🌐 Auto" : lang === "de" ? "🇩🇪 German" : "🇬🇧 English"}
+              {LANG_FLAG[lang]} {lang === "auto" ? "Auto" : LANG_LABEL[lang]}
             </button>
           ))}
         </div>
         <span className="text-slate-400 dark:text-slate-500">→</span>
-        <span className="px-4 py-2 text-sm font-medium bg-slate-100 dark:bg-slate-800 rounded-lg">🇺🇦 Ukrainian</span>
+        <div className="flex rounded-lg overflow-hidden border border-slate-300 dark:border-slate-700" role="group" aria-label="Target language">
+          {TARGET_OPTIONS.map((lang) => (
+            <button
+              key={lang}
+              onClick={() => {
+                setTargetLang(lang);
+                stopSpeaking();
+              }}
+              className={`px-3 py-2 text-sm font-medium ${
+                targetLang === lang ? "bg-indigo-600 text-white" : "bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/50"
+              }`}
+            >
+              {LANG_FLAG[lang]} {LANG_LABEL[lang]}
+            </button>
+          ))}
+        </div>
 
         <select
           value={model}
@@ -460,12 +493,10 @@ export function TranslatorDemo({ isAuthenticated }: { isAuthenticated: boolean }
             ? `Listening (${
                 sourceLang === "auto"
                   ? detectedLang
-                    ? `auto · ${detectedLang === "de" ? "German" : "English"}`
+                    ? `auto · ${LANG_LABEL[detectedLang]}`
                     : "auto-detecting…"
-                  : sourceLang === "de"
-                    ? "German"
-                    : "English"
-              })… speak naturally`
+                  : LANG_LABEL[sourceLang]
+              }) → ${LANG_LABEL[targetLang]}… speak naturally`
             : speechSupported
               ? "Tap to speak"
               : "Speech recognition is not supported in this browser — use the text box below (Chrome/Edge recommended)."}
@@ -478,7 +509,7 @@ export function TranslatorDemo({ isAuthenticated }: { isAuthenticated: boolean }
         <input
           value={typedText}
           onChange={(e) => setTypedText(e.target.value)}
-          placeholder={`Or type ${sourceLang === "auto" ? "German or English" : sourceLang === "de" ? "German" : "English"} text and press Enter…`}
+          placeholder={`Or type ${sourceLang === "auto" ? "any" : LANG_LABEL[sourceLang]} text and press Enter…`}
           className="flex-1 rounded-lg border border-slate-300 dark:border-slate-700 px-4 py-2.5 text-sm bg-white dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500"
         />
         <button
@@ -507,7 +538,9 @@ export function TranslatorDemo({ isAuthenticated }: { isAuthenticated: boolean }
           </div>
         </div>
         <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-4 min-h-48">
-          <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500 mb-3">Ukrainian</h2>
+          <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500 mb-3">
+            {LANG_LABEL[targetLang]}
+          </h2>
           <div className="space-y-2 text-slate-800 dark:text-slate-100">
             {segments.map((s) => (
               <div key={s.id} className="group flex items-start gap-2">
@@ -540,7 +573,7 @@ export function TranslatorDemo({ isAuthenticated }: { isAuthenticated: boolean }
             ))}
             {liveTranslation && <p className="text-slate-400 dark:text-slate-500 italic">{liveTranslation}</p>}
             {segments.length === 0 && !liveTranslation && (
-              <p className="text-slate-300 dark:text-slate-600 text-sm">Переклад з’явиться тут…</p>
+              <p className="text-slate-300 dark:text-slate-600 text-sm">Translation will appear here…</p>
             )}
           </div>
         </div>
@@ -569,7 +602,7 @@ export function TranslatorDemo({ isAuthenticated }: { isAuthenticated: boolean }
               }}
               className="rounded"
             />
-            🔊 Auto-play Ukrainian
+            🔊 Auto-play {LANG_LABEL[targetLang]}
           </label>
         </div>
         {segments.length > 0 && (
