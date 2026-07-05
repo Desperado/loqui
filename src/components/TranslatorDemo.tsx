@@ -74,6 +74,7 @@ export function TranslatorDemo({ isAuthenticated }: { isAuthenticated: boolean }
   const [targetLang, setTargetLang] = useState<Lang>("uk");
   const [detectedLang, setDetectedLang] = useState<DetectedLang | null>(null);
   const [autoSpeak, setAutoSpeak] = useState(false);
+  const [engine, setEngine] = useState<"browser" | "server">("browser");
   const [listening, setListening] = useState(false);
   const [speechSupported, setSpeechSupported] = useState(true);
   const [segments, setSegments] = useState<Segment[]>([]);
@@ -95,6 +96,9 @@ export function TranslatorDemo({ isAuthenticated }: { isAuthenticated: boolean }
   const sttLangRef = useRef<DetectedLang>("en");
   const speechQueueRef = useRef<{ text: string; lang: Lang }[]>([]);
   const speakingRef = useRef(false);
+  const audioElRef = useRef<HTMLAudioElement | null>(null);
+  const mediaStreamRef = useRef<MediaStream | null>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   langRef.current = sourceLang;
   targetRef.current = targetLang;
   modelRef.current = model;
@@ -128,29 +132,58 @@ export function TranslatorDemo({ isAuthenticated }: { isAuthenticated: boolean }
     return () => window.speechSynthesis.removeEventListener("voiceschanged", warm);
   }, []);
 
-  // ---- Target-language voice playback (queued so segments don't talk over each other) ----
-  const drainSpeechQueue = useCallback(() => {
-    if (speakingRef.current || typeof window === "undefined" || !window.speechSynthesis) return;
+  // ---- Target-language voice playback ----
+  // Prefer server-side TTS (/api/speak, OpenAI); fall back to the browser voice.
+  const drainSpeechQueue = useCallback(async () => {
+    if (speakingRef.current) return;
     const next = speechQueueRef.current.shift();
     if (!next) return;
     speakingRef.current = true;
-    const u = makeUtterance(next.text, next.lang);
-    u.onend = () => {
+    const done = () => {
       speakingRef.current = false;
-      drainSpeechQueue();
+      void drainSpeechQueue();
     };
-    u.onerror = () => {
-      speakingRef.current = false;
-      drainSpeechQueue();
-    };
-    window.speechSynthesis.speak(u);
+    let url: string | null = null;
+    try {
+      const res = await fetch("/api/speak", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: next.text, lang: next.lang }),
+      });
+      if (res.ok) url = URL.createObjectURL(await res.blob());
+    } catch {
+      /* fall through to the browser voice */
+    }
+    if (url) {
+      const audio = audioElRef.current ?? new Audio();
+      audioElRef.current = audio;
+      audio.src = url;
+      audio.onended = () => {
+        URL.revokeObjectURL(url as string);
+        done();
+      };
+      audio.onerror = () => {
+        URL.revokeObjectURL(url as string);
+        done();
+      };
+      audio.play().catch(done);
+      return;
+    }
+    if (typeof window !== "undefined" && window.speechSynthesis) {
+      const u = makeUtterance(next.text, next.lang);
+      u.onend = done;
+      u.onerror = done;
+      window.speechSynthesis.speak(u);
+    } else {
+      done();
+    }
   }, []);
 
   const enqueueSpeak = useCallback(
     (text: string, lang: Lang) => {
-      if (typeof window === "undefined" || !window.speechSynthesis || !text.trim()) return;
+      if (!text.trim()) return;
       speechQueueRef.current.push({ text, lang });
-      drainSpeechQueue();
+      void drainSpeechQueue();
     },
     [drainSpeechQueue]
   );
@@ -158,6 +191,10 @@ export function TranslatorDemo({ isAuthenticated }: { isAuthenticated: boolean }
   const stopSpeaking = useCallback(() => {
     speechQueueRef.current = [];
     speakingRef.current = false;
+    if (audioElRef.current) {
+      audioElRef.current.pause();
+      audioElRef.current.src = "";
+    }
     if (typeof window !== "undefined" && window.speechSynthesis) window.speechSynthesis.cancel();
   }, []);
 
@@ -374,7 +411,92 @@ export function TranslatorDemo({ isAuthenticated }: { isAuthenticated: boolean }
     rec.start();
   }, [stopListening, translateInterim, translateSegment]);
 
-  useEffect(() => () => stopListening(), [stopListening]);
+  // ---- Server STT (OpenAI Whisper): record short clips, transcribe, translate ----
+  const RECORD_MS = 4000;
+
+  const transcribeAndTranslate = useCallback(
+    async (blob: Blob) => {
+      const fd = new FormData();
+      fd.append("file", blob, "audio.webm");
+      fd.append("sourceLang", langRef.current);
+      try {
+        const res = await fetch("/api/transcribe", { method: "POST", body: fd });
+        if (!res.ok) return;
+        const { text, language } = await res.json();
+        if (language && langRef.current === "auto") {
+          const map: Record<string, DetectedLang> = { english: "en", german: "de", ukrainian: "uk" };
+          const d = map[String(language).toLowerCase()];
+          if (d) setDetectedLang(d);
+        }
+        const t = (text ?? "").trim();
+        if (t) void translateSegment(t);
+      } catch {
+        /* best-effort */
+      }
+    },
+    [translateSegment]
+  );
+
+  const cycleRecord = useCallback(() => {
+    const stream = mediaStreamRef.current;
+    if (!stream || !listeningRef.current) return;
+    const mime = typeof MediaRecorder !== "undefined" && MediaRecorder.isTypeSupported("audio/webm") ? "audio/webm" : "";
+    const mr = mime ? new MediaRecorder(stream, { mimeType: mime }) : new MediaRecorder(stream);
+    const chunks: Blob[] = [];
+    mr.ondataavailable = (e) => {
+      if (e.data.size) chunks.push(e.data);
+    };
+    mr.onstop = () => {
+      const blob = new Blob(chunks, { type: mr.mimeType || "audio/webm" });
+      if (blob.size > 1200) void transcribeAndTranslate(blob);
+      if (listeningRef.current) cycleRecord();
+    };
+    mediaRecorderRef.current = mr;
+    mr.start();
+    setTimeout(() => {
+      if (mr.state !== "inactive") mr.stop();
+    }, RECORD_MS);
+  }, [transcribeAndTranslate]);
+
+  const startServerListening = useCallback(async () => {
+    setStatusMsg(null);
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      mediaStreamRef.current = stream;
+      listeningRef.current = true;
+      setListening(true);
+      cycleRecord();
+    } catch {
+      setStatusMsg("Microphone access denied — allow the microphone or type below.");
+    }
+  }, [cycleRecord]);
+
+  const stopServerListening = useCallback(() => {
+    listeningRef.current = false;
+    setListening(false);
+    try {
+      mediaRecorderRef.current?.stop();
+    } catch {
+      /* already stopped */
+    }
+    mediaRecorderRef.current = null;
+    mediaStreamRef.current?.getTracks().forEach((t) => t.stop());
+    mediaStreamRef.current = null;
+    setInterim("");
+    setLiveTranslation("");
+    stopSpeaking();
+  }, [stopSpeaking]);
+
+  const beginListening = () => (engine === "server" ? void startServerListening() : startListening());
+  const endListening = () => (engine === "server" ? stopServerListening() : stopListening());
+
+  useEffect(
+    () => () => {
+      stopListening();
+      stopServerListening();
+    },
+    [stopListening, stopServerListening]
+  );
 
   const handleTypedSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -479,8 +601,8 @@ export function TranslatorDemo({ isAuthenticated }: { isAuthenticated: boolean }
       {/* Mic */}
       <div className="flex flex-col items-center gap-2 py-2">
         <button
-          onClick={listening ? stopListening : startListening}
-          disabled={!speechSupported || !model}
+          onClick={listening ? endListening : beginListening}
+          disabled={!model || (engine === "browser" && !speechSupported)}
           className={`w-20 h-20 rounded-full text-3xl flex items-center justify-center transition-colors ${
             listening ? "bg-red-500 text-white recording" : "bg-indigo-600 text-white hover:bg-indigo-500"
           } disabled:opacity-40 disabled:cursor-not-allowed`}
@@ -496,10 +618,10 @@ export function TranslatorDemo({ isAuthenticated }: { isAuthenticated: boolean }
                     ? `auto · ${LANG_LABEL[detectedLang]}`
                     : "auto-detecting…"
                   : LANG_LABEL[sourceLang]
-              }) → ${LANG_LABEL[targetLang]}… speak naturally`
-            : speechSupported
-              ? "Tap to speak"
-              : "Speech recognition is not supported in this browser — use the text box below (Chrome/Edge recommended)."}
+              }) → ${LANG_LABEL[targetLang]}… ${engine === "server" ? "speak in short phrases" : "speak naturally"}`
+            : engine === "browser" && !speechSupported
+              ? "Live recognition isn't supported here — switch to ☁️ Whisper below, or type."
+              : "Tap to speak"}
         </p>
         {statusMsg && <p className="text-sm text-red-600 dark:text-red-400">{statusMsg}</p>}
       </div>
@@ -604,6 +726,28 @@ export function TranslatorDemo({ isAuthenticated }: { isAuthenticated: boolean }
             />
             🔊 Auto-play {LANG_LABEL[targetLang]}
           </label>
+          <span className="flex items-center gap-1.5">
+            Voice input:
+            <span className="flex rounded-lg overflow-hidden border border-slate-300 dark:border-slate-700">
+              {(["browser", "server"] as const).map((e) => (
+                <button
+                  key={e}
+                  onClick={() => {
+                    if (listening) endListening();
+                    setEngine(e);
+                  }}
+                  className={`px-2 py-1 text-xs font-medium ${
+                    engine === e
+                      ? "bg-indigo-600 text-white"
+                      : "bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/50"
+                  }`}
+                  title={e === "browser" ? "Live browser recognition (Chrome/Edge)" : "Server-side Whisper — works in any browser"}
+                >
+                  {e === "browser" ? "⚡ Live" : "☁️ Whisper"}
+                </button>
+              ))}
+            </span>
+          </span>
         </div>
         {segments.length > 0 && (
           <button onClick={clearAll} className="text-slate-400 dark:text-slate-500 hover:text-red-500 dark:hover:text-red-400">

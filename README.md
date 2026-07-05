@@ -1,49 +1,90 @@
 # 🎙️ Loqui
 
-Instant **streaming voice translation**: speak German or English, get Ukrainian in real time —
-routed through ultra-fast LLMs (Cerebras Llama/Qwen, Gemma via Groq & Google AI, OpenAI).
-Dubbing is on the roadmap (a browser text-to-speech preview is built in).
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Next.js](https://img.shields.io/badge/Next.js-15-black)](https://nextjs.org/)
+[![Deploy on Railway](https://img.shields.io/badge/Deploy-Railway-8b5cf6)](https://railway.app/)
 
-See [plan.md](plan.md) for the full architecture plan.
+Instant **streaming voice translation** between **German, English, and Ukrainian** — speak in
+any of the three, get a live translation in another, routed through ultra-fast LLMs
+(Cerebras, Groq, Google Gemini, OpenAI). Optional server-side speech recognition (Whisper) and
+voice dubbing (OpenAI TTS) make it work in any browser.
+
+See [plan.md](plan.md) for the architecture write-up.
 
 ## Features
 
-- **Live demo page** — tap the mic, speak, watch the Ukrainian translation stream in as you talk
-  (interim speech gets a live preview; finalized sentences stream token-by-token). Typed input
-  works too for browsers without speech recognition.
-- **Multi-model routing** — pick any configured model; all providers are driven through one
-  OpenAI-compatible streaming client. Per-segment time-to-first-token is displayed.
-- **Chat history** — sign in with GitHub and every session is saved; browse and delete on `/history`.
-- **Evals** — `/evals` runs the built-in DE→UK / EN→UK eval set through selected models and scores
-  with chrF + optional LLM-as-judge, and validates voice recognition with a read-aloud WER test.
-- **Dubbing preview** — 🔊 on any translation speaks it with the browser's Ukrainian voice.
+- **Any-direction translation** among 🇩🇪 German, 🇬🇧 English, 🇺🇦 Ukrainian, with an **Auto**
+  source mode that detects the spoken language for you.
+- **Live streaming** — finalized speech streams token-by-token; interim speech gets a debounced
+  preview. Per-segment time-to-first-token is shown (typically ~150–300 ms).
+- **Two voice-input engines** — **⚡ Live** (browser Web Speech API, lowest latency, Chrome/Edge)
+  and **☁️ Whisper** (server-side speech-to-text, works in any browser). Typed input works too.
+- **Voice playback / dubbing** — 🔊 speaks any translation, and an auto-play toggle dubs each
+  segment as it finishes. Uses server-side OpenAI TTS when configured, with a browser voice fallback.
+- **Multi-model routing** — every provider is driven through one OpenAI-compatible streaming
+  client; adding a model is a one-entry change to the registry. Models auto-enable per API key.
+- **Chat history** — sign in with GitHub and sessions are saved; browse/delete on `/history`.
+- **Evals** — `/evals` scores translation quality across models (chrF + optional LLM-as-judge)
+  and validates speech recognition with a read-aloud word-error-rate test.
+- **Light / dark / system** theme switcher.
 
-## Getting started
+## Tech stack
+
+Next.js 15 (App Router) · React 19 · TypeScript · Tailwind CSS · Auth.js (NextAuth v5) ·
+SQLite (better-sqlite3).
+
+## Quick start
 
 ```bash
 npm install
-cp .env.example .env   # fill in keys (see below)
-npm run dev            # http://localhost:3000
+cp .env.example .env    # add at least one provider key (see below)
+npm run dev             # http://localhost:3000
 ```
+
+Voice input works best in Chrome or Edge; the ☁️ Whisper engine works anywhere (needs `OPENAI_API_KEY`).
 
 ### Environment
 
 | Variable | Purpose |
 |---|---|
-| `AUTH_SECRET` | Auth.js secret (`npx auth secret`) |
+| `AUTH_SECRET` | Auth.js secret — generate with `npx auth secret` |
 | `AUTH_GITHUB_ID` / `AUTH_GITHUB_SECRET` | GitHub OAuth app (callback: `<origin>/api/auth/callback/github`) |
-| `CEREBRAS_API_KEY` | Enables Llama 3.3 70B, Llama 3.1 8B, Qwen 3 32B (ultra-fast) |
-| `GROQ_API_KEY` | Enables Gemma 2 9B |
-| `GOOGLE_AI_API_KEY` | Enables Gemma 3 27B, Gemini 2.0 Flash |
-| `OPENAI_API_KEY` | Enables GPT-4o mini |
+| `CEREBRAS_API_KEY` | Cerebras — Gemma 4 31B, GPT-OSS 120B (ultra-fast) |
+| `GROQ_API_KEY` | Groq — Llama 3.1 8B Instant, Llama 3.3 70B |
+| `GOOGLE_AI_API_KEY` | Google — Gemini 3.1 Flash Lite, Gemini 2.5 Flash |
+| `OPENAI_API_KEY` | OpenAI — GPT-4o mini translation, **Whisper STT** and **TTS dubbing** |
+| `LOQUI_DB_PATH` | Optional — SQLite path (default `./data/loqui.db`) |
 
-Models auto-enable based on which keys are present — set at least one provider key.
-The demo works without signing in; GitHub login is only needed to save history.
+Set at least one provider key — models auto-enable based on which keys are present.
+Server-side speech-to-text and text-to-speech require `OPENAI_API_KEY`. The demo works without
+signing in; GitHub login is only needed to save history.
 
-Speech recognition uses the browser's Web Speech API — best in Chrome or Edge.
+## Deployment (Railway)
 
-## Notes
+Loqui ships with `railway.json` (Nixpacks). To deploy:
 
-- Storage is SQLite (`./data/loqui.db`) — perfect for local/demo use. For serverless deploys,
-  swap `src/lib/db.ts` for Postgres/Turso (the interface is small on purpose).
-- `npm run build && npm start` for production mode.
+1. Create a project and service, and attach a **volume mounted at `/data`** so the SQLite
+   database persists across redeploys.
+2. Set `LOQUI_DB_PATH=/data/loqui.db`, `AUTH_SECRET`, and your provider keys.
+3. Deploy (`railway up`, or connect the GitHub repo). `next start` binds to Railway's `$PORT`.
+
+Any Node host works; on ephemeral/serverless platforms, swap `src/lib/db.ts` for Postgres or Turso
+(the storage interface is intentionally small).
+
+## Scripts
+
+```bash
+npm run dev      # dev server
+npm run build    # production build
+npm start        # run the production build
+npm run lint     # lint
+```
+
+## Contributing
+
+Contributions are welcome — see [CONTRIBUTING.md](CONTRIBUTING.md) and our
+[Code of Conduct](CODE_OF_CONDUCT.md).
+
+## License
+
+[MIT](LICENSE) © Ruslan Strazhnyk
