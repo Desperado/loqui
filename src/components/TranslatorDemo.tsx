@@ -99,6 +99,8 @@ export function TranslatorDemo({ isAuthenticated }: { isAuthenticated: boolean }
   const audioElRef = useRef<HTMLAudioElement | null>(null);
   const mediaStreamRef = useRef<MediaStream | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioCtxRef = useRef<AudioContext | null>(null);
+  const analyserRef = useRef<AnalyserNode | null>(null);
   langRef.current = sourceLang;
   targetRef.current = targetLang;
   modelRef.current = model;
@@ -446,9 +448,28 @@ export function TranslatorDemo({ isAuthenticated }: { isAuthenticated: boolean }
     mr.ondataavailable = (e) => {
       if (e.data.size) chunks.push(e.data);
     };
+    // Voice-activity detection: only keep the clip if it actually contains speech,
+    // so silent gaps aren't sent to Whisper (which hallucinates stock phrases like
+    // "Дякую за перегляд!" / "Thanks for watching" on silence).
+    const analyser = analyserRef.current;
+    const buf = analyser ? new Uint8Array(analyser.fftSize) : null;
+    // Fail open: if VAD is unavailable, send the clip anyway and let the server
+    // hallucination filter guard against silence. Otherwise VAD gates on energy.
+    let sawSpeech = !analyser;
+    const vad = setInterval(() => {
+      if (!analyser || !buf) return;
+      analyser.getByteTimeDomainData(buf);
+      let sum = 0;
+      for (let i = 0; i < buf.length; i++) {
+        const v = (buf[i] - 128) / 128;
+        sum += v * v;
+      }
+      if (Math.sqrt(sum / buf.length) > 0.025) sawSpeech = true;
+    }, 100);
     mr.onstop = () => {
+      clearInterval(vad);
       const blob = new Blob(chunks, { type: mr.mimeType || "audio/webm" });
-      if (blob.size > 1200) void transcribeAndTranslate(blob);
+      if (sawSpeech && blob.size > 1200) void transcribeAndTranslate(blob);
       if (listeningRef.current) cycleRecord();
     };
     mediaRecorderRef.current = mr;
@@ -463,6 +484,18 @@ export function TranslatorDemo({ isAuthenticated }: { isAuthenticated: boolean }
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       mediaStreamRef.current = stream;
+      try {
+        const ctx = new AudioContext();
+        const source = ctx.createMediaStreamSource(stream);
+        const analyser = ctx.createAnalyser();
+        analyser.fftSize = 512;
+        source.connect(analyser);
+        void ctx.resume().catch(() => {}); // may start suspended (Safari/iOS)
+        audioCtxRef.current = ctx;
+        analyserRef.current = analyser;
+      } catch {
+        /* VAD unavailable — the server-side filter still guards against hallucinations */
+      }
       listeningRef.current = true;
       setListening(true);
       cycleRecord();
@@ -482,6 +515,9 @@ export function TranslatorDemo({ isAuthenticated }: { isAuthenticated: boolean }
     mediaRecorderRef.current = null;
     mediaStreamRef.current?.getTracks().forEach((t) => t.stop());
     mediaStreamRef.current = null;
+    analyserRef.current = null;
+    audioCtxRef.current?.close().catch(() => {});
+    audioCtxRef.current = null;
     setInterim("");
     setLiveTranslation("");
     stopSpeaking();
