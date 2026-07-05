@@ -38,7 +38,7 @@ export const PROVIDERS: Record<ProviderId, Provider> = {
 };
 
 export interface ModelSpec {
-  /** Unique id used throughout the app, e.g. "cerebras/llama-3.3-70b". */
+  /** Unique id used throughout the app, e.g. "cerebras/gemma-4-31b". */
   id: string;
   provider: ProviderId;
   /** Model name sent to the provider API. */
@@ -50,31 +50,31 @@ export interface ModelSpec {
 
 export const MODELS: ModelSpec[] = [
   {
-    id: "cerebras/llama-3.3-70b",
+    id: "cerebras/gemma-4-31b",
     provider: "cerebras",
-    model: "llama-3.3-70b",
-    label: "Llama 3.3 70B (Cerebras)",
+    model: "gemma-4-31b",
+    label: "Gemma 4 31B (Cerebras)",
     speed: "ultra",
   },
   {
-    id: "cerebras/llama3.1-8b",
+    id: "cerebras/gpt-oss-120b",
     provider: "cerebras",
-    model: "llama3.1-8b",
-    label: "Llama 3.1 8B (Cerebras)",
-    speed: "ultra",
+    model: "gpt-oss-120b",
+    label: "GPT-OSS 120B (Cerebras)",
+    speed: "fast",
   },
   {
-    id: "cerebras/qwen-3-32b",
-    provider: "cerebras",
-    model: "qwen-3-32b",
-    label: "Qwen 3 32B (Cerebras)",
-    speed: "ultra",
-  },
-  {
-    id: "groq/gemma2-9b-it",
+    id: "groq/llama-3.1-8b-instant",
     provider: "groq",
-    model: "gemma2-9b-it",
-    label: "Gemma 2 9B (Groq)",
+    model: "llama-3.1-8b-instant",
+    label: "Llama 3.1 8B Instant (Groq)",
+    speed: "ultra",
+  },
+  {
+    id: "groq/llama-3.3-70b-versatile",
+    provider: "groq",
+    model: "llama-3.3-70b-versatile",
+    label: "Llama 3.3 70B (Groq)",
     speed: "fast",
   },
   {
