@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
-type SourceLang = "de" | "en";
+type SourceLang = "auto" | "de" | "en";
+type DetectedLang = "de" | "en";
 
 interface ModelInfo {
   id: string;
@@ -21,7 +22,41 @@ interface Segment {
   error?: string;
 }
 
-const SPEECH_LANG: Record<SourceLang, string> = { de: "de-DE", en: "en-US" };
+const SPEECH_LANG: Record<DetectedLang, string> = { de: "de-DE", en: "en-US" };
+
+/** Lightweight German-vs-English heuristic for adaptive speech recognition. */
+function detectLang(text: string): DetectedLang | null {
+  const t = text.toLowerCase();
+  if (/[äöüß]/.test(t)) return "de";
+  const de = (
+    t.match(
+      /\b(der|die|das|und|ich|nicht|ist|ein|eine|mit|auf|für|sie|wir|aber|auch|sehr|was|wenn|weil|dass|schon|noch|immer|kein|habe|haben|sind|wird|nach|über|oder|als|bei|nur)\b/g
+    ) || []
+  ).length;
+  const en = (
+    t.match(
+      /\b(the|and|is|are|you|to|of|in|it|that|this|with|for|was|have|not|but|they|we|he|she|on|at|my|your|from|what|when|because|would|there|about)\b/g
+    ) || []
+  ).length;
+  if (de > en) return "de";
+  if (en > de) return "en";
+  return null;
+}
+
+function pickUkVoice(): SpeechSynthesisVoice | null {
+  if (typeof window === "undefined" || !window.speechSynthesis) return null;
+  return (
+    window.speechSynthesis.getVoices().find((v) => v.lang?.toLowerCase().startsWith("uk")) ?? null
+  );
+}
+
+function makeUkUtterance(text: string): SpeechSynthesisUtterance {
+  const u = new SpeechSynthesisUtterance(text);
+  u.lang = "uk-UA";
+  const v = pickUkVoice();
+  if (v) u.voice = v;
+  return u;
+}
 
 let segmentCounter = 0;
 const nextSegmentId = () => `seg-${++segmentCounter}-${Date.now()}`;
@@ -29,7 +64,9 @@ const nextSegmentId = () => `seg-${++segmentCounter}-${Date.now()}`;
 export function TranslatorDemo({ isAuthenticated }: { isAuthenticated: boolean }) {
   const [models, setModels] = useState<ModelInfo[]>([]);
   const [model, setModel] = useState("");
-  const [sourceLang, setSourceLang] = useState<SourceLang>("de");
+  const [sourceLang, setSourceLang] = useState<SourceLang>("auto");
+  const [detectedLang, setDetectedLang] = useState<DetectedLang | null>(null);
+  const [autoSpeak, setAutoSpeak] = useState(false);
   const [listening, setListening] = useState(false);
   const [speechSupported, setSpeechSupported] = useState(true);
   const [segments, setSegments] = useState<Segment[]>([]);
@@ -46,8 +83,13 @@ export function TranslatorDemo({ isAuthenticated }: { isAuthenticated: boolean }
   const listeningRef = useRef(false);
   const langRef = useRef(sourceLang);
   const modelRef = useRef(model);
+  const autoSpeakRef = useRef(autoSpeak);
+  const sttLangRef = useRef<DetectedLang>("en");
+  const speechQueueRef = useRef<string[]>([]);
+  const speakingRef = useRef(false);
   langRef.current = sourceLang;
   modelRef.current = model;
+  autoSpeakRef.current = autoSpeak;
 
   // Load model registry
   useEffect(() => {
@@ -68,6 +110,48 @@ export function TranslatorDemo({ isAuthenticated }: { isAuthenticated: boolean }
     }
   }, []);
 
+  // Warm up the speech-synthesis voice list (populated asynchronously by the browser).
+  useEffect(() => {
+    if (typeof window === "undefined" || !window.speechSynthesis) return;
+    const warm = () => window.speechSynthesis.getVoices();
+    warm();
+    window.speechSynthesis.addEventListener("voiceschanged", warm);
+    return () => window.speechSynthesis.removeEventListener("voiceschanged", warm);
+  }, []);
+
+  // ---- Ukrainian voice playback (queued so segments don't talk over each other) ----
+  const drainSpeechQueue = useCallback(() => {
+    if (speakingRef.current || typeof window === "undefined" || !window.speechSynthesis) return;
+    const next = speechQueueRef.current.shift();
+    if (!next) return;
+    speakingRef.current = true;
+    const u = makeUkUtterance(next);
+    u.onend = () => {
+      speakingRef.current = false;
+      drainSpeechQueue();
+    };
+    u.onerror = () => {
+      speakingRef.current = false;
+      drainSpeechQueue();
+    };
+    window.speechSynthesis.speak(u);
+  }, []);
+
+  const enqueueSpeak = useCallback(
+    (text: string) => {
+      if (typeof window === "undefined" || !window.speechSynthesis || !text.trim()) return;
+      speechQueueRef.current.push(text);
+      drainSpeechQueue();
+    },
+    [drainSpeechQueue]
+  );
+
+  const stopSpeaking = useCallback(() => {
+    speechQueueRef.current = [];
+    speakingRef.current = false;
+    if (typeof window !== "undefined" && window.speechSynthesis) window.speechSynthesis.cancel();
+  }, []);
+
   const ensureConversation = useCallback(async (): Promise<string | null> => {
     if (!isAuthenticated || !saveHistory) return null;
     if (conversationIdRef.current) return conversationIdRef.current;
@@ -76,7 +160,9 @@ export function TranslatorDemo({ isAuthenticated }: { isAuthenticated: boolean }
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          title: `${langRef.current === "de" ? "German" : "English"} → Ukrainian · ${new Date().toLocaleString()}`,
+          title: `${
+            langRef.current === "de" ? "German" : langRef.current === "en" ? "English" : "Auto"
+          } → Ukrainian · ${new Date().toLocaleString()}`,
           sourceLang: langRef.current,
           model: modelRef.current,
         }),
@@ -136,7 +222,10 @@ export function TranslatorDemo({ isAuthenticated }: { isAuthenticated: boolean }
         const latencyMs = Math.round(firstToken ?? performance.now() - started);
         const finished: Segment = { id, source, target, latencyMs, streaming: false };
         setSegments((prev) => prev.map((s) => (s.id === id ? finished : s)));
-        if (target) void saveMessage(finished);
+        if (target) {
+          void saveMessage(finished);
+          if (autoSpeakRef.current) enqueueSpeak(target);
+        }
       } catch (err) {
         const message = err instanceof Error ? err.message : "Translation failed";
         setSegments((prev) =>
@@ -144,7 +233,7 @@ export function TranslatorDemo({ isAuthenticated }: { isAuthenticated: boolean }
         );
       }
     },
-    [saveMessage]
+    [saveMessage, enqueueSpeak]
   );
 
   /** Live-translate interim speech with debounce; replaced on every update. */
@@ -188,7 +277,8 @@ export function TranslatorDemo({ isAuthenticated }: { isAuthenticated: boolean }
     recognitionRef.current = null;
     setInterim("");
     setLiveTranslation("");
-  }, []);
+    stopSpeaking();
+  }, [stopSpeaking]);
 
   const startListening = useCallback(() => {
     const Ctor = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -198,7 +288,8 @@ export function TranslatorDemo({ isAuthenticated }: { isAuthenticated: boolean }
     }
     setStatusMsg(null);
     const rec = new Ctor();
-    rec.lang = SPEECH_LANG[langRef.current];
+    rec.lang =
+      langRef.current === "auto" ? SPEECH_LANG[sttLangRef.current] : SPEECH_LANG[langRef.current];
     rec.continuous = true;
     rec.interimResults = true;
     rec.maxAlternatives = 1;
@@ -210,7 +301,25 @@ export function TranslatorDemo({ isAuthenticated }: { isAuthenticated: boolean }
         const transcript = result[0]?.transcript ?? "";
         if (result.isFinal) {
           const finalText = transcript.trim();
-          if (finalText) void translateSegment(finalText);
+          if (finalText) {
+            // Adaptive language detection: switch the recognizer for the next
+            // utterance when Auto mode detects a different language.
+            if (langRef.current === "auto") {
+              const detected = detectLang(finalText);
+              if (detected) {
+                setDetectedLang(detected);
+                if (detected !== sttLangRef.current) {
+                  sttLangRef.current = detected;
+                  try {
+                    rec.stop(); // onend restarts with the new language
+                  } catch {
+                    /* will restart via onend */
+                  }
+                }
+              }
+            }
+            void translateSegment(finalText);
+          }
         } else {
           interimText += transcript;
         }
@@ -232,6 +341,7 @@ export function TranslatorDemo({ isAuthenticated }: { isAuthenticated: boolean }
       // Chrome stops recognition periodically; restart while the mic is on.
       if (listeningRef.current) {
         try {
+          if (langRef.current === "auto") rec.lang = SPEECH_LANG[sttLangRef.current];
           rec.start();
         } catch {
           stopListening();
@@ -255,35 +365,46 @@ export function TranslatorDemo({ isAuthenticated }: { isAuthenticated: boolean }
     void translateSegment(text);
   };
 
+  /** Manual playback — interrupts whatever is currently speaking. */
   const speak = (text: string) => {
-    if (typeof window === "undefined" || !window.speechSynthesis) return;
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.lang = "uk-UA";
-    const ukVoice = window.speechSynthesis.getVoices().find((v) => v.lang.startsWith("uk"));
-    if (ukVoice) utterance.voice = ukVoice;
-    window.speechSynthesis.cancel();
-    window.speechSynthesis.speak(utterance);
+    if (typeof window === "undefined" || !window.speechSynthesis || !text.trim()) return;
+    stopSpeaking();
+    window.speechSynthesis.speak(makeUkUtterance(text));
   };
 
   const clearAll = () => {
     setSegments([]);
     setInterim("");
     setLiveTranslation("");
+    setDetectedLang(null);
+    sttLangRef.current = "en";
     conversationIdRef.current = null;
+    stopSpeaking();
   };
 
   const enabledCount = models.filter((m) => m.enabled).length;
+
+  const heardLabel =
+    sourceLang === "auto"
+      ? detectedLang
+        ? `${detectedLang === "de" ? "German" : "English"} · auto`
+        : "Source · auto"
+      : sourceLang === "de"
+        ? "German"
+        : "English";
 
   return (
     <div className="space-y-4">
       {/* Controls */}
       <div className="flex flex-wrap items-center gap-3 bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-4">
         <div className="flex rounded-lg overflow-hidden border border-slate-300 dark:border-slate-700" role="group" aria-label="Source language">
-          {(["de", "en"] as SourceLang[]).map((lang) => (
+          {(["auto", "de", "en"] as SourceLang[]).map((lang) => (
             <button
               key={lang}
               onClick={() => {
                 setSourceLang(lang);
+                setDetectedLang(null);
+                sttLangRef.current = "en";
                 if (listening) {
                   stopListening();
                 }
@@ -292,7 +413,7 @@ export function TranslatorDemo({ isAuthenticated }: { isAuthenticated: boolean }
                 sourceLang === lang ? "bg-indigo-600 text-white" : "bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/50"
               }`}
             >
-              {lang === "de" ? "🇩🇪 German" : "🇬🇧 English"}
+              {lang === "auto" ? "🌐 Auto" : lang === "de" ? "🇩🇪 German" : "🇬🇧 English"}
             </button>
           ))}
         </div>
@@ -336,7 +457,15 @@ export function TranslatorDemo({ isAuthenticated }: { isAuthenticated: boolean }
         </button>
         <p className="text-sm text-slate-500 dark:text-slate-400">
           {listening
-            ? `Listening in ${sourceLang === "de" ? "German" : "English"}… speak naturally`
+            ? `Listening (${
+                sourceLang === "auto"
+                  ? detectedLang
+                    ? `auto · ${detectedLang === "de" ? "German" : "English"}`
+                    : "auto-detecting…"
+                  : sourceLang === "de"
+                    ? "German"
+                    : "English"
+              })… speak naturally`
             : speechSupported
               ? "Tap to speak"
               : "Speech recognition is not supported in this browser — use the text box below (Chrome/Edge recommended)."}
@@ -349,7 +478,7 @@ export function TranslatorDemo({ isAuthenticated }: { isAuthenticated: boolean }
         <input
           value={typedText}
           onChange={(e) => setTypedText(e.target.value)}
-          placeholder={`Or type ${sourceLang === "de" ? "German" : "English"} text and press Enter…`}
+          placeholder={`Or type ${sourceLang === "auto" ? "German or English" : sourceLang === "de" ? "German" : "English"} text and press Enter…`}
           className="flex-1 rounded-lg border border-slate-300 dark:border-slate-700 px-4 py-2.5 text-sm bg-white dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500"
         />
         <button
@@ -365,7 +494,7 @@ export function TranslatorDemo({ isAuthenticated }: { isAuthenticated: boolean }
       <div className="grid md:grid-cols-2 gap-4">
         <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-4 min-h-48">
           <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500 mb-3">
-            {sourceLang === "de" ? "German" : "English"} (heard)
+            {heardLabel} (heard)
           </h2>
           <div className="space-y-2 text-slate-800 dark:text-slate-100">
             {segments.map((s) => (
@@ -418,17 +547,31 @@ export function TranslatorDemo({ isAuthenticated }: { isAuthenticated: boolean }
       </div>
 
       {/* Footer controls */}
-      <div className="flex items-center justify-between text-sm text-slate-500 dark:text-slate-400">
-        <label className="flex items-center gap-2">
-          <input
-            type="checkbox"
-            checked={saveHistory}
-            disabled={!isAuthenticated}
-            onChange={(e) => setSaveHistory(e.target.checked)}
-            className="rounded"
-          />
-          Save to history{!isAuthenticated && " (sign in with GitHub to enable)"}
-        </label>
+      <div className="flex flex-wrap items-center justify-between gap-3 text-sm text-slate-500 dark:text-slate-400">
+        <div className="flex flex-wrap items-center gap-4">
+          <label className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              checked={saveHistory}
+              disabled={!isAuthenticated}
+              onChange={(e) => setSaveHistory(e.target.checked)}
+              className="rounded"
+            />
+            Save to history{!isAuthenticated && " (sign in with GitHub to enable)"}
+          </label>
+          <label className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              checked={autoSpeak}
+              onChange={(e) => {
+                setAutoSpeak(e.target.checked);
+                if (!e.target.checked) stopSpeaking();
+              }}
+              className="rounded"
+            />
+            🔊 Auto-play Ukrainian
+          </label>
+        </div>
         {segments.length > 0 && (
           <button onClick={clearAll} className="text-slate-400 dark:text-slate-500 hover:text-red-500 dark:hover:text-red-400">
             Clear session
