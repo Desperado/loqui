@@ -3,7 +3,11 @@
 @tailwind utilities;
 
 body {
-  @apply bg-slate-50 text-slate-900 antialiased;
+  @apply bg-slate-50 text-slate-900 antialiased transition-colors;
+}
+
+.dark body {
+  @apply bg-slate-950 text-slate-100;
 }
 
 @keyframes pulse-ring {

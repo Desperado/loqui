@@ -88,7 +88,7 @@ export const TRANSLATION_EVAL_SET: EvalItem[] = [
 ];
 
 /** Read-aloud phrases for validating speech recognition (WER against these). */
-export const STT_EVAL_SET: { id: string; lang: SourceLang; text: string }[] = [
+export const STT_EVAL_SET: { id: string; lang: "de" | "en"; text: string }[] = [
   { id: "stt-de-01", lang: "de", text: "Ich möchte morgen früh nach München fahren." },
   { id: "stt-de-02", lang: "de", text: "Das Restaurant an der Ecke hat heute leider geschlossen." },
   { id: "stt-de-03", lang: "de", text: "Bitte schicken Sie mir die Unterlagen bis Freitag." },

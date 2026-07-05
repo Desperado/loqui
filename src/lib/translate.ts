@@ -1,8 +1,9 @@
 import { getModel, PROVIDERS, type ModelSpec } from "./models";
 
-export type SourceLang = "de" | "en";
+export type SourceLang = "auto" | "de" | "en";
 
 const LANG_NAMES: Record<SourceLang, string> = {
+  auto: "German or English",
   de: "German",
   en: "English",
 };
@@ -12,10 +13,15 @@ export function translationSystemPrompt(sourceLang: SourceLang): string {
     `You are a professional simultaneous interpreter translating spoken ${LANG_NAMES[sourceLang]} into Ukrainian.`,
     "Rules:",
     "- Output ONLY the Ukrainian translation. No comments, no quotes, no explanations.",
+    sourceLang === "auto"
+      ? "- The input may be German or English; detect the source language automatically and translate it into Ukrainian."
+      : null,
     "- Preserve the speaker's tone and register; keep it natural spoken Ukrainian.",
     "- The input comes from live speech recognition: it may be a sentence fragment. Translate the fragment as-is without completing it.",
     "- Keep names, numbers and units accurate.",
-  ].join("\n");
+  ]
+    .filter(Boolean)
+    .join("\n");
 }
 
 interface ChatOptions {

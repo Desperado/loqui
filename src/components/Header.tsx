@@ -1,32 +1,34 @@
 import Link from "next/link";
 import { auth, signIn, signOut } from "@/auth";
+import { ThemeToggle } from "@/components/ThemeToggle";
 
 export async function Header() {
   const session = await auth();
 
   return (
-    <header className="border-b border-slate-200 bg-white">
+    <header className="border-b border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
       <div className="max-w-5xl mx-auto px-4 h-14 flex items-center justify-between">
         <div className="flex items-center gap-6">
-          <Link href="/" className="text-lg font-bold tracking-tight text-indigo-600">
+          <Link href="/" className="text-lg font-bold tracking-tight text-indigo-600 dark:text-indigo-400">
             🎙️ Loqui
           </Link>
-          <nav className="flex items-center gap-4 text-sm text-slate-600">
-            <Link href="/" className="hover:text-indigo-600">
+          <nav className="flex items-center gap-4 text-sm text-slate-600 dark:text-slate-300">
+            <Link href="/" className="hover:text-indigo-600 dark:hover:text-indigo-400">
               Translate
             </Link>
-            <Link href="/history" className="hover:text-indigo-600">
+            <Link href="/history" className="hover:text-indigo-600 dark:hover:text-indigo-400">
               History
             </Link>
-            <Link href="/evals" className="hover:text-indigo-600">
+            <Link href="/evals" className="hover:text-indigo-600 dark:hover:text-indigo-400">
               Evals
             </Link>
           </nav>
         </div>
         <div className="flex items-center gap-3 text-sm">
+          <ThemeToggle />
           {session?.user ? (
             <>
-              <span className="flex items-center gap-2 text-slate-600">
+              <span className="flex items-center gap-2 text-slate-600 dark:text-slate-300">
                 {session.user.image && (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img
@@ -43,7 +45,7 @@ export async function Header() {
                   await signOut();
                 }}
               >
-                <button className="text-slate-500 hover:text-slate-800">Sign out</button>
+                <button className="text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-100">Sign out</button>
               </form>
             </>
           ) : (

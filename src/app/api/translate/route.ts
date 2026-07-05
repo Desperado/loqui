@@ -18,7 +18,8 @@ export async function POST(req: NextRequest) {
   }
 
   const text = (body.text ?? "").trim();
-  const sourceLang = body.sourceLang === "de" ? "de" : ("en" as SourceLang);
+  const sourceLang: SourceLang =
+    body.sourceLang === "de" ? "de" : body.sourceLang === "en" ? "en" : "auto";
   const modelId = body.model ?? "";
 
   if (!text) return new Response("Missing text", { status: 400 });

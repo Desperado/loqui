@@ -7,7 +7,7 @@ export default function EvalsPage() {
     <div className="space-y-6">
       <div>
         <h1 className="text-xl font-bold">Quality evals</h1>
-        <p className="text-slate-500 text-sm">
+        <p className="text-slate-500 dark:text-slate-400 text-sm">
           Validate translation quality across models and check how well voice recognition hears you.
         </p>
       </div>

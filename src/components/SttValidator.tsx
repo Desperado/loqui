@@ -83,15 +83,15 @@ export function SttValidator({ phrases }: { phrases: Phrase[] }) {
     : null;
 
   return (
-    <div className="bg-white rounded-xl border border-slate-200 p-4 space-y-3">
+    <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-4 space-y-3">
       <h2 className="font-semibold">Voice recognition validation (WER)</h2>
-      <p className="text-sm text-slate-500">
+      <p className="text-sm text-slate-500 dark:text-slate-400">
         Read the phrase aloud; Loqui compares what the recognizer heard against the reference and computes
         the word error rate. Lower is better (0% = perfect recognition).
       </p>
 
-      <div className="rounded-lg bg-slate-50 border border-slate-200 p-4 text-center">
-        <div className="text-xs text-slate-400 mb-1">
+      <div className="rounded-lg bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 p-4 text-center">
+        <div className="text-xs text-slate-400 dark:text-slate-500 mb-1">
           {phrase.lang === "de" ? "🇩🇪 Read aloud in German" : "🇬🇧 Read aloud in English"} ·{" "}
           {current + 1}/{phrases.length}
         </div>
@@ -110,13 +110,13 @@ export function SttValidator({ phrases }: { phrases: Phrase[] }) {
         <button
           onClick={score}
           disabled={!recognized.trim()}
-          className="rounded-lg border border-slate-300 px-4 py-2 text-sm hover:bg-slate-50 disabled:opacity-40"
+          className="rounded-lg border border-slate-300 dark:border-slate-700 px-4 py-2 text-sm hover:bg-slate-50 dark:hover:bg-slate-800/50 disabled:opacity-40"
         >
           Score & next
         </button>
         <button
           onClick={() => setCurrent((c) => (c + 1) % phrases.length)}
-          className="text-sm text-slate-400 hover:text-slate-600"
+          className="text-sm text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300"
         >
           Skip
         </button>
@@ -124,20 +124,20 @@ export function SttValidator({ phrases }: { phrases: Phrase[] }) {
 
       {recognized && (
         <p className="text-sm">
-          <span className="text-slate-400">Heard:</span> {recognized}
+          <span className="text-slate-400 dark:text-slate-500">Heard:</span> {recognized}
         </p>
       )}
-      {error && <p className="text-sm text-red-600">{error}</p>}
+      {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
 
       {attempts.length > 0 && (
         <div className="pt-2">
           <div className="text-sm font-medium mb-2">
-            Average WER: <span className={avgWer! <= 10 ? "text-green-600" : avgWer! <= 25 ? "text-amber-600" : "text-red-600"}>{avgWer}%</span>{" "}
+            Average WER: <span className={avgWer! <= 10 ? "text-green-600 dark:text-green-400" : avgWer! <= 25 ? "text-amber-600 dark:text-amber-400" : "text-red-600 dark:text-red-400"}>{avgWer}%</span>{" "}
             over {attempts.length} attempt{attempts.length > 1 ? "s" : ""}
           </div>
           <table className="w-full text-xs">
             <thead>
-              <tr className="text-left text-slate-400 border-b border-slate-100">
+              <tr className="text-left text-slate-400 dark:text-slate-500 border-b border-slate-100 dark:border-slate-700">
                 <th className="py-1 pr-3">Expected</th>
                 <th className="py-1 pr-3">Recognized</th>
                 <th className="py-1">WER</th>
@@ -145,7 +145,7 @@ export function SttValidator({ phrases }: { phrases: Phrase[] }) {
             </thead>
             <tbody>
               {attempts.map((a, i) => (
-                <tr key={i} className="border-b border-slate-50 align-top">
+                <tr key={i} className="border-b border-slate-50 dark:border-slate-700 align-top">
                   <td className="py-1 pr-3">{a.expected}</td>
                   <td className="py-1 pr-3">{a.recognized}</td>
                   <td className="py-1">{Math.round(a.wer * 1000) / 10}%</td>
