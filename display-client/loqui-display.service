@@ -1,0 +1,17 @@
+[Unit]
+Description=Loqui LED matrix ticker client
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+# Override with: sudo systemctl edit loqui-display
+ExecStart=/usr/bin/python3 /home/pi/loqui/display-client/loqui_display.py \
+  --url https://your-loqui-server.example \
+  --led-chain 3 --led-gpio-mapping adafruit-hat-pwm --led-slowdown-gpio 2
+Restart=always
+RestartSec=5
+# rpi-rgb-led-matrix needs root for direct GPIO access.
+User=root
+
+[Install]
+WantedBy=multi-user.target

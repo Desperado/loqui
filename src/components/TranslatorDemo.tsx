@@ -74,6 +74,8 @@ export function TranslatorDemo({ isAuthenticated }: { isAuthenticated: boolean }
   const [targetLang, setTargetLang] = useState<Lang>("uk");
   const [detectedLang, setDetectedLang] = useState<DetectedLang | null>(null);
   const [autoSpeak, setAutoSpeak] = useState(false);
+  const [sendToDisplay, setSendToDisplay] = useState(false);
+  const [displayListeners, setDisplayListeners] = useState<number | null>(null);
   const [engine, setEngine] = useState<"browser" | "server">("browser");
   const [listening, setListening] = useState(false);
   const [speechSupported, setSpeechSupported] = useState(true);
@@ -93,6 +95,7 @@ export function TranslatorDemo({ isAuthenticated }: { isAuthenticated: boolean }
   const targetRef = useRef(targetLang);
   const modelRef = useRef(model);
   const autoSpeakRef = useRef(autoSpeak);
+  const sendToDisplayRef = useRef(sendToDisplay);
   const sttLangRef = useRef<DetectedLang>("en");
   const speechQueueRef = useRef<{ text: string; lang: Lang }[]>([]);
   const speakingRef = useRef(false);
@@ -105,6 +108,45 @@ export function TranslatorDemo({ isAuthenticated }: { isAuthenticated: boolean }
   targetRef.current = targetLang;
   modelRef.current = model;
   autoSpeakRef.current = autoSpeak;
+  sendToDisplayRef.current = sendToDisplay;
+
+  // ---- External display broadcast (LED ticker / kiosk page on /display) ----
+  const pushToDisplay = useCallback((kind: "final" | "interim" | "clear", text = "") => {
+    if (!sendToDisplayRef.current) return;
+    fetch("/api/display/send", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ kind, text, lang: targetRef.current }),
+    })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data: { listeners?: number } | null) => {
+        if (data && typeof data.listeners === "number") setDisplayListeners(data.listeners);
+      })
+      .catch(() => {});
+  }, []);
+
+  // Poll listener count while the toggle is on, so the UI can show whether a
+  // display is actually connected.
+  useEffect(() => {
+    if (!sendToDisplay) {
+      setDisplayListeners(null);
+      return;
+    }
+    let cancelled = false;
+    const check = () =>
+      fetch("/api/display/send")
+        .then((r) => r.json())
+        .then((data: { listeners?: number }) => {
+          if (!cancelled && typeof data.listeners === "number") setDisplayListeners(data.listeners);
+        })
+        .catch(() => {});
+    void check();
+    const timer = setInterval(check, 10_000);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [sendToDisplay]);
 
   // Load model registry
   useEffect(() => {
@@ -278,6 +320,7 @@ export function TranslatorDemo({ isAuthenticated }: { isAuthenticated: boolean }
         if (out) {
           void saveMessage(finished);
           if (autoSpeakRef.current) enqueueSpeak(out, target);
+          pushToDisplay("final", out);
         }
       } catch (err) {
         const message = err instanceof Error ? err.message : "Translation failed";
@@ -286,7 +329,7 @@ export function TranslatorDemo({ isAuthenticated }: { isAuthenticated: boolean }
         );
       }
     },
-    [saveMessage, enqueueSpeak]
+    [saveMessage, enqueueSpeak, pushToDisplay]
   );
 
   /** Live-translate interim speech with debounce; replaced on every update. */
@@ -322,11 +365,14 @@ export function TranslatorDemo({ isAuthenticated }: { isAuthenticated: boolean }
           out += decoder.decode(value, { stream: true });
           if (!controller.signal.aborted) setLiveTranslation(out);
         }
+        // One push per completed interim stream — a live preview line on the
+        // display without a network call per token.
+        if (!controller.signal.aborted && out) pushToDisplay("interim", out);
       } catch {
         /* aborted or failed — interim translation is best-effort */
       }
     }, 350);
-  }, []);
+  }, [pushToDisplay]);
 
   const stopListening = useCallback(() => {
     listeningRef.current = false;
@@ -561,6 +607,7 @@ export function TranslatorDemo({ isAuthenticated }: { isAuthenticated: boolean }
     resetSttLang();
     conversationIdRef.current = null;
     stopSpeaking();
+    pushToDisplay("clear");
   };
 
   const enabledCount = models.filter((m) => m.enabled).length;
@@ -761,6 +808,29 @@ export function TranslatorDemo({ isAuthenticated }: { isAuthenticated: boolean }
               className="rounded"
             />
             🔊 Auto-play {LANG_LABEL[targetLang]}
+          </label>
+          <label
+            className="flex items-center gap-2"
+            title="Broadcast translations to connected displays (LED ticker, /display page)"
+          >
+            <input
+              type="checkbox"
+              checked={sendToDisplay}
+              onChange={(e) => setSendToDisplay(e.target.checked)}
+              className="rounded"
+            />
+            📺 Send to display
+            {sendToDisplay && displayListeners !== null && (
+              <span
+                className={`text-xs ${
+                  displayListeners > 0 ? "text-emerald-600 dark:text-emerald-400" : "text-slate-400 dark:text-slate-500"
+                }`}
+              >
+                {displayListeners > 0
+                  ? `${displayListeners} connected`
+                  : "no displays connected"}
+              </span>
+            )}
           </label>
           <span className="flex items-center gap-1.5">
             Voice input:

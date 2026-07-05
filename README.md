@@ -23,6 +23,10 @@ See [plan.md](plan.md) for the architecture write-up.
   segment as it finishes. Uses server-side OpenAI TTS when configured, with a browser voice fallback.
 - **Multi-model routing** — every provider is driven through one OpenAI-compatible streaming
   client; adding a model is a one-entry change to the registry. Models auto-enable per API key.
+- **External displays** — a **📺 Send to display** toggle broadcasts each translation over SSE
+  (`/api/display/stream`) to any connected display client: the fullscreen `/display` subtitle
+  page (tablet or kiosk browser parked at the TV), or a Raspberry Pi–driven LED matrix ticker
+  (hardware guide + client in [`display-client/`](display-client/)).
 - **Chat history** — sign in with GitHub and sessions are saved; browse/delete on `/history`.
 - **Evals** — `/evals` scores translation quality across models (chrF + optional LLM-as-judge)
   and validates speech recognition with a read-aloud word-error-rate test.
@@ -54,6 +58,7 @@ Voice input works best in Chrome or Edge; the ☁️ Whisper engine works anywhe
 | `GOOGLE_AI_API_KEY` | Google — Gemini 3.1 Flash Lite, Gemini 2.5 Flash |
 | `OPENAI_API_KEY` | OpenAI — GPT-4o mini translation, **Whisper STT** and **TTS dubbing** |
 | `LOQUI_DB_PATH` | Optional — SQLite path (default `./data/loqui.db`) |
+| `LOQUI_DISPLAY_TOKEN` | Optional — shared secret for the external-display feed (`/api/display/stream`) |
 
 Set at least one provider key — models auto-enable based on which keys are present.
 Server-side speech-to-text and text-to-speech require `OPENAI_API_KEY`. The demo works without
