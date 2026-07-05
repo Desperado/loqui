@@ -65,18 +65,18 @@ function filterHallucination(
 ): string {
   if (!text) return "";
   const n = normalize(text);
-  if (SHORT_GENERIC.has(n)) return "";
+  // Whisper flags silence with no segments, high no_speech_prob, or very low confidence.
+  const likelySilence =
+    segments.length === 0 ||
+    segments.every((s) => (s.no_speech_prob ?? 0) > 0.5 || (s.avg_logprob ?? 0) < -1.0);
+  // Short fillers ("you", "thanks", "дякую") are dropped only when the clip also
+  // looks like silence — so a real, confident "thank you" still translates.
+  if (SHORT_GENERIC.has(n) && likelySilence) return "";
   for (const phrase of HALLUCINATION_PHRASES) {
     // Exact match, or a short output that is essentially just the phrase.
     if (n === phrase || (n.includes(phrase) && n.length <= phrase.length + 6)) return "";
   }
-  // Whisper flags silence with high no_speech_prob and/or very low confidence.
-  if (
-    segments.length > 0 &&
-    segments.every((s) => (s.no_speech_prob ?? 0) > 0.5 || (s.avg_logprob ?? 0) < -1.0)
-  ) {
-    return "";
-  }
+  if (likelySilence && segments.length > 0) return "";
   return text;
 }
 

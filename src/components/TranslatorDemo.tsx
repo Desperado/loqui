@@ -451,9 +451,11 @@ export function TranslatorDemo({ isAuthenticated }: { isAuthenticated: boolean }
     // Voice-activity detection: only keep the clip if it actually contains speech,
     // so silent gaps aren't sent to Whisper (which hallucinates stock phrases like
     // "Дякую за перегляд!" / "Thanks for watching" on silence).
-    let sawSpeech = false;
     const analyser = analyserRef.current;
     const buf = analyser ? new Uint8Array(analyser.fftSize) : null;
+    // Fail open: if VAD is unavailable, send the clip anyway and let the server
+    // hallucination filter guard against silence. Otherwise VAD gates on energy.
+    let sawSpeech = !analyser;
     const vad = setInterval(() => {
       if (!analyser || !buf) return;
       analyser.getByteTimeDomainData(buf);
@@ -488,6 +490,7 @@ export function TranslatorDemo({ isAuthenticated }: { isAuthenticated: boolean }
         const analyser = ctx.createAnalyser();
         analyser.fftSize = 512;
         source.connect(analyser);
+        void ctx.resume().catch(() => {}); // may start suspended (Safari/iOS)
         audioCtxRef.current = ctx;
         analyserRef.current = analyser;
       } catch {
