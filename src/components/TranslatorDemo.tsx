@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { DEFAULT_PERSONA_ID, VOICE_PERSONAS, personaVoice } from "@/lib/voices";
 
 type Lang = "de" | "en" | "uk";
 type SourceLang = "auto" | Lang;
@@ -74,6 +75,7 @@ export function TranslatorDemo({ isAuthenticated }: { isAuthenticated: boolean }
   const [targetLang, setTargetLang] = useState<Lang>("uk");
   const [detectedLang, setDetectedLang] = useState<DetectedLang | null>(null);
   const [autoSpeak, setAutoSpeak] = useState(false);
+  const [personaId, setPersonaId] = useState(DEFAULT_PERSONA_ID);
   const [sendToDisplay, setSendToDisplay] = useState(false);
   const [displayListeners, setDisplayListeners] = useState<number | null>(null);
   const [engine, setEngine] = useState<"browser" | "server">("browser");
@@ -95,9 +97,10 @@ export function TranslatorDemo({ isAuthenticated }: { isAuthenticated: boolean }
   const targetRef = useRef(targetLang);
   const modelRef = useRef(model);
   const autoSpeakRef = useRef(autoSpeak);
+  const personaIdRef = useRef(personaId);
   const sendToDisplayRef = useRef(sendToDisplay);
   const sttLangRef = useRef<DetectedLang>("en");
-  const speechQueueRef = useRef<{ text: string; lang: Lang }[]>([]);
+  const speechQueueRef = useRef<{ text: string; lang: Lang; voice: string }[]>([]);
   const speakingRef = useRef(false);
   const audioElRef = useRef<HTMLAudioElement | null>(null);
   const mediaStreamRef = useRef<MediaStream | null>(null);
@@ -108,6 +111,7 @@ export function TranslatorDemo({ isAuthenticated }: { isAuthenticated: boolean }
   targetRef.current = targetLang;
   modelRef.current = model;
   autoSpeakRef.current = autoSpeak;
+  personaIdRef.current = personaId;
   sendToDisplayRef.current = sendToDisplay;
 
   // ---- External display broadcast (LED ticker / kiosk page on /display) ----
@@ -192,7 +196,7 @@ export function TranslatorDemo({ isAuthenticated }: { isAuthenticated: boolean }
       const res = await fetch("/api/speak", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: next.text, lang: next.lang }),
+        body: JSON.stringify({ text: next.text, lang: next.lang, voice: next.voice }),
       });
       if (res.ok) url = URL.createObjectURL(await res.blob());
     } catch {
@@ -226,7 +230,7 @@ export function TranslatorDemo({ isAuthenticated }: { isAuthenticated: boolean }
   const enqueueSpeak = useCallback(
     (text: string, lang: Lang) => {
       if (!text.trim()) return;
-      speechQueueRef.current.push({ text, lang });
+      speechQueueRef.current.push({ text, lang, voice: personaVoice(personaIdRef.current) });
       void drainSpeechQueue();
     },
     [drainSpeechQueue]
@@ -604,9 +608,9 @@ export function TranslatorDemo({ isAuthenticated }: { isAuthenticated: boolean }
 
   /** Manual playback — interrupts whatever is currently speaking. */
   const speak = (text: string) => {
-    if (typeof window === "undefined" || !window.speechSynthesis || !text.trim()) return;
+    if (!text.trim()) return;
     stopSpeaking();
-    window.speechSynthesis.speak(makeUtterance(text, targetRef.current));
+    enqueueSpeak(text, targetRef.current);
   };
 
   const resetSttLang = () => {
@@ -822,6 +826,21 @@ export function TranslatorDemo({ isAuthenticated }: { isAuthenticated: boolean }
               className="rounded"
             />
             🔊 Auto-play {LANG_LABEL[targetLang]}
+          </label>
+          <label className="flex items-center gap-2">
+            Voice
+            <select
+              value={personaId}
+              onChange={(e) => setPersonaId(e.target.value)}
+              className="rounded-lg border border-slate-300 dark:border-slate-700 px-2 py-1 bg-white dark:bg-slate-800"
+              aria-label="Voice persona"
+            >
+              {VOICE_PERSONAS.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.label}
+                </option>
+              ))}
+            </select>
           </label>
           <label
             className="flex items-center gap-2"

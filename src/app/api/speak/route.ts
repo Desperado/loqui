@@ -1,10 +1,11 @@
 import { NextRequest } from "next/server";
+import { OPENAI_TTS_VOICES } from "@/lib/voices";
 
 export const dynamic = "force-dynamic";
 
 /**
  * POST /api/speak
- * Body: { text: string, lang?: "de" | "en" | "uk" }
+ * Body: { text: string, lang?: "de" | "en" | "uk", voice?: OpenAiTtsVoice }
  * Server-side text-to-speech via OpenAI. Streams back MP3 audio.
  */
 export async function POST(req: NextRequest) {
@@ -13,7 +14,7 @@ export async function POST(req: NextRequest) {
     return new Response("TTS not configured (missing OPENAI_API_KEY)", { status: 503 });
   }
 
-  let body: { text?: string; lang?: string };
+  let body: { text?: string; lang?: string; voice?: string };
   try {
     body = await req.json();
   } catch {
@@ -23,13 +24,17 @@ export async function POST(req: NextRequest) {
   const text = (body.text ?? "").trim();
   if (!text) return new Response("Missing text", { status: 400 });
 
+  const voice = (OPENAI_TTS_VOICES as readonly string[]).includes(body.voice ?? "")
+    ? (body.voice as (typeof OPENAI_TTS_VOICES)[number])
+    : "nova";
+
   try {
     const res = await fetch("https://api.openai.com/v1/audio/speech", {
       method: "POST",
       headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
       body: JSON.stringify({
         model: "gpt-4o-mini-tts",
-        voice: "nova",
+        voice,
         input: text.slice(0, 2000),
         response_format: "mp3",
       }),
