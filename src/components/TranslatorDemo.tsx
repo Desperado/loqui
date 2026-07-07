@@ -690,6 +690,25 @@ export function TranslatorDemo({ isAuthenticated }: { isAuthenticated: boolean }
             </option>
           ))}
         </select>
+
+        <label className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
+          Voice
+          <select
+            value={personaId}
+            onChange={(e) => {
+              setPersonaId(e.target.value);
+              stopSpeaking();
+            }}
+            className="rounded-lg border border-slate-300 dark:border-slate-700 px-3 py-2 text-sm bg-white dark:bg-slate-800"
+            aria-label="Voice persona"
+          >
+            {VOICE_PERSONAS.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.label}
+              </option>
+            ))}
+          </select>
+        </label>
       </div>
 
       {enabledCount === 0 && models.length > 0 && (
@@ -826,21 +845,6 @@ export function TranslatorDemo({ isAuthenticated }: { isAuthenticated: boolean }
               className="rounded"
             />
             🔊 Auto-play {LANG_LABEL[targetLang]}
-          </label>
-          <label className="flex items-center gap-2">
-            Voice
-            <select
-              value={personaId}
-              onChange={(e) => setPersonaId(e.target.value)}
-              className="rounded-lg border border-slate-300 dark:border-slate-700 px-2 py-1 bg-white dark:bg-slate-800"
-              aria-label="Voice persona"
-            >
-              {VOICE_PERSONAS.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.label}
-                </option>
-              ))}
-            </select>
           </label>
           <label
             className="flex items-center gap-2"
