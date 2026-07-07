@@ -25,9 +25,9 @@ export interface VoicePersona {
 }
 
 export const VOICE_PERSONAS: VoicePersona[] = [
-  { id: "woman", label: "🙋‍♀️ Woman", voice: "nova" },
-  { id: "man", label: "🙋‍♂️ Man", voice: "onyx" },
-  { id: "other", label: "🧑 Other", voice: "alloy" },
+  { id: "woman", label: "Female", voice: "nova" },
+  { id: "man", label: "Male", voice: "onyx" },
+  { id: "other", label: "Neutral", voice: "alloy" },
 ];
 
 export const DEFAULT_PERSONA_ID = "woman";
