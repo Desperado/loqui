@@ -1,19 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { DEFAULT_PERSONA_ID, VOICE_PERSONAS, personaVoice } from "@/lib/voices";
+import { ModelSelector, type ModelInfo } from "@/components/ModelSelector";
+import { VoiceSelector } from "@/components/VoiceSelector";
+import { DEFAULT_PERSONA_ID, personaVoice } from "@/lib/voices";
 
 type Lang = "de" | "en" | "uk";
 type SourceLang = "auto" | Lang;
 type DetectedLang = Lang;
-
-interface ModelInfo {
-  id: string;
-  label: string;
-  provider: string;
-  speed: string;
-  enabled: boolean;
-}
 
 interface Segment {
   id: string;
@@ -640,75 +634,44 @@ export function TranslatorDemo({ isAuthenticated }: { isAuthenticated: boolean }
   return (
     <div className="space-y-4">
       {/* Controls */}
-      <div className="flex flex-wrap items-center gap-3 bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-4">
-        <div className="flex rounded-lg overflow-hidden border border-slate-300 dark:border-slate-700" role="group" aria-label="Source language">
-          {SOURCE_OPTIONS.map((lang) => (
-            <button
-              key={lang}
-              onClick={() => {
-                setSourceLang(lang);
-                resetSttLang();
-                if (listening) stopListening();
-              }}
-              className={`px-3 py-2 text-sm font-medium ${
-                sourceLang === lang ? "bg-indigo-600 text-white" : "bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/50"
-              }`}
-            >
-              {LANG_FLAG[lang]} {lang === "auto" ? "Auto" : LANG_LABEL[lang]}
-            </button>
-          ))}
-        </div>
-        <span className="text-slate-400 dark:text-slate-500">→</span>
-        <div className="flex rounded-lg overflow-hidden border border-slate-300 dark:border-slate-700" role="group" aria-label="Target language">
-          {TARGET_OPTIONS.map((lang) => (
-            <button
-              key={lang}
-              onClick={() => {
-                setTargetLang(lang);
-                stopSpeaking();
-              }}
-              className={`px-3 py-2 text-sm font-medium ${
-                targetLang === lang ? "bg-indigo-600 text-white" : "bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/50"
-              }`}
-            >
-              {LANG_FLAG[lang]} {LANG_LABEL[lang]}
-            </button>
-          ))}
-        </div>
-
-        <select
-          value={model}
-          onChange={(e) => setModel(e.target.value)}
-          className="ml-auto rounded-lg border border-slate-300 dark:border-slate-700 px-3 py-2 text-sm bg-white dark:bg-slate-800 min-w-56"
-          aria-label="Translation model"
-        >
-          {models.map((m) => (
-            <option key={m.id} value={m.id} disabled={!m.enabled}>
-              {m.speed === "ultra" ? "⚡ " : ""}
-              {m.label}
-              {m.enabled ? "" : " (no API key)"}
-            </option>
-          ))}
-        </select>
-
-        <label className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
-          Voice
-          <select
-            value={personaId}
-            onChange={(e) => {
-              setPersonaId(e.target.value);
-              stopSpeaking();
-            }}
-            className="rounded-lg border border-slate-300 dark:border-slate-700 px-3 py-2 text-sm bg-white dark:bg-slate-800"
-            aria-label="Voice persona"
-          >
-            {VOICE_PERSONAS.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.label}
-              </option>
+      <div className="flex flex-col items-center gap-4 bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-4">
+        <div className="flex flex-wrap items-center justify-center gap-3">
+          <div className="flex rounded-lg overflow-hidden border border-slate-300 dark:border-slate-700" role="group" aria-label="Source language">
+            {SOURCE_OPTIONS.map((lang) => (
+              <button
+                key={lang}
+                onClick={() => {
+                  setSourceLang(lang);
+                  resetSttLang();
+                  if (listening) stopListening();
+                }}
+                className={`px-3 py-2 text-sm font-medium ${
+                  sourceLang === lang ? "bg-indigo-600 text-white" : "bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/50"
+                }`}
+              >
+                {LANG_FLAG[lang]} {lang === "auto" ? "Auto" : LANG_LABEL[lang]}
+              </button>
             ))}
-          </select>
-        </label>
+          </div>
+          <span className="text-slate-400 dark:text-slate-500">→</span>
+          <div className="flex rounded-lg overflow-hidden border border-slate-300 dark:border-slate-700" role="group" aria-label="Target language">
+            {TARGET_OPTIONS.map((lang) => (
+              <button
+                key={lang}
+                onClick={() => {
+                  setTargetLang(lang);
+                  stopSpeaking();
+                }}
+                className={`px-3 py-2 text-sm font-medium ${
+                  targetLang === lang ? "bg-indigo-600 text-white" : "bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/50"
+                }`}
+              >
+                {LANG_FLAG[lang]} {LANG_LABEL[lang]}
+              </button>
+            ))}
+          </div>
+        </div>
+        <ModelSelector models={models} value={model} onChange={setModel} />
       </div>
 
       {enabledCount === 0 && models.length > 0 && (
@@ -846,6 +809,13 @@ export function TranslatorDemo({ isAuthenticated }: { isAuthenticated: boolean }
             />
             🔊 Auto-play {LANG_LABEL[targetLang]}
           </label>
+          <VoiceSelector
+            value={personaId}
+            onChange={(id) => {
+              setPersonaId(id);
+              stopSpeaking();
+            }}
+          />
           <label
             className="flex items-center gap-2"
             title="Broadcast translations to connected displays (LED ticker, /display page)"
