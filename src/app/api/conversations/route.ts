@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { createConversation, listConversations } from "@/lib/db";
+import { isLang } from "@/lib/translate";
 
 export const dynamic = "force-dynamic";
 
@@ -16,7 +17,7 @@ export async function POST(req: NextRequest) {
 
   const body = await req.json().catch(() => ({}));
   const title = String(body.title ?? "Untitled session").slice(0, 120);
-  const sourceLang = body.sourceLang === "de" ? "de" : "en";
+  const sourceLang = typeof body.sourceLang === "string" && isLang(body.sourceLang) ? body.sourceLang : "en";
   const model = String(body.model ?? "").slice(0, 80);
 
   const conversation = createConversation(session.user.id, title, sourceLang, model);

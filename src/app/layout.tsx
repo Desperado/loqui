@@ -6,7 +6,7 @@ import { themeInitScript } from "@/components/ThemeToggle";
 export const metadata: Metadata = {
   title: "Loqui — instant voice translation",
   description:
-    "Instant streaming voice translation from German and English into Ukrainian, powered by fast LLMs (Cerebras, Gemma, and more).",
+    "Instant streaming voice translation across 9 languages (German, English, Ukrainian, French, Polish, Spanish, Latin, Italian, Swedish), powered by fast LLMs (Cerebras, Groq, Gemini, and more).",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
