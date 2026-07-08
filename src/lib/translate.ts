@@ -1,19 +1,31 @@
 import { getModel, PROVIDERS, type ModelSpec } from "./models";
 
-export type Lang = "de" | "en" | "uk";
+export type Lang = "de" | "en" | "uk" | "fr" | "pl" | "es" | "la" | "it" | "sv";
 export type SourceLang = "auto" | Lang;
 
-const LANG_NAMES: Record<Lang, string> = {
+export const LANG_NAMES: Record<Lang, string> = {
   de: "German",
   en: "English",
   uk: "Ukrainian",
+  fr: "French",
+  pl: "Polish",
+  es: "Spanish",
+  la: "Latin",
+  it: "Italian",
+  sv: "Swedish",
 };
+
+export const LANGS = Object.keys(LANG_NAMES) as Lang[];
+
+export function isLang(value: string): value is Lang {
+  return (LANGS as string[]).includes(value);
+}
 
 export function translationSystemPrompt(sourceLang: SourceLang, targetLang: Lang = "uk"): string {
   const target = LANG_NAMES[targetLang];
   const source =
     sourceLang === "auto"
-      ? "the source language (German, English, or Ukrainian)"
+      ? `the source language (${LANGS.map((l) => LANG_NAMES[l]).join(", ")})`
       : LANG_NAMES[sourceLang];
   return [
     `You are a professional simultaneous interpreter translating spoken ${source} into ${target}.`,

@@ -4,9 +4,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { ModelSelector, type ModelInfo } from "@/components/ModelSelector";
 import { VoiceSelector } from "@/components/VoiceSelector";
 import { DEFAULT_PERSONA_ID, personaVoice } from "@/lib/voices";
+import { LANGS, LANG_NAMES, type Lang, type SourceLang } from "@/lib/translate";
 
-type Lang = "de" | "en" | "uk";
-type SourceLang = "auto" | Lang;
 type DetectedLang = Lang;
 
 interface Segment {
@@ -18,31 +17,60 @@ interface Segment {
   error?: string;
 }
 
-const SPEECH_LANG: Record<Lang, string> = { de: "de-DE", en: "en-US", uk: "uk-UA" };
-const LANG_LABEL: Record<Lang, string> = { de: "German", en: "English", uk: "Ukrainian" };
-const LANG_FLAG: Record<SourceLang, string> = { auto: "🌐", de: "🇩🇪", en: "🇬🇧", uk: "🇺🇦" };
+const SPEECH_LANG: Record<Lang, string> = {
+  de: "de-DE",
+  en: "en-US",
+  uk: "uk-UA",
+  fr: "fr-FR",
+  pl: "pl-PL",
+  es: "es-ES",
+  la: "la",
+  it: "it-IT",
+  sv: "sv-SE",
+};
+const LANG_LABEL: Record<Lang, string> = LANG_NAMES;
+const LANG_FLAG: Record<SourceLang, string> = {
+  auto: "🌐",
+  de: "🇩🇪",
+  en: "🇬🇧",
+  uk: "🇺🇦",
+  fr: "🇫🇷",
+  pl: "🇵🇱",
+  es: "🇪🇸",
+  la: "🏛️",
+  it: "🇮🇹",
+  sv: "🇸🇪",
+};
 
-const SOURCE_OPTIONS: SourceLang[] = ["auto", "de", "en", "uk"];
-const TARGET_OPTIONS: Lang[] = ["uk", "de", "en"];
+const SOURCE_OPTIONS: SourceLang[] = ["auto", ...LANGS];
+const TARGET_OPTIONS: Lang[] = LANGS;
 
 /** Lightweight source-language heuristic for adaptive speech recognition. */
+const LANG_WORDS: Record<Exclude<Lang, "uk">, RegExp> = {
+  de: /\b(der|die|das|und|ich|nicht|ist|ein|eine|mit|auf|für|sie|wir|aber|auch|sehr|was|wenn|weil|dass|schon|noch|immer|kein|habe|haben|sind|wird|nach|über|oder|als|bei|nur)\b/g,
+  en: /\b(the|and|is|are|you|to|of|in|it|that|this|with|for|was|have|not|but|they|we|he|she|on|at|my|your|from|what|when|because|would|there|about)\b/g,
+  fr: /\b(le|la|les|et|est|un|une|des|je|tu|il|elle|nous|vous|ils|avec|pour|dans|mais|pas|que|qui|ce|cette|être|avoir|très|plus)\b/g,
+  pl: /\b(i|w|na|nie|jest|to|się|z|do|jak|ale|co|tak|jestem|mamy|bardzo|dla|czy|może|dzień)\b/g,
+  es: /\b(el|la|los|las|es|un|una|de|en|con|para|pero|que|no|muy|más|yo|tú|nosotros|estar|ser|hola)\b/g,
+  la: /\b(et|in|est|non|ad|cum|sed|qui|quod|sunt|esse|atque|ex|per|de|ut|nam|hoc|haec)\b/g,
+  it: /\b(il|la|di|che|non|per|con|una|sono|è|questo|questa|molto|ma|come|anche|noi|voi|essere)\b/g,
+  sv: /\b(och|är|det|som|en|ett|jag|inte|med|på|för|men|att|vi|du|har|vara|mycket|den|de)\b/g,
+};
+
 function detectLang(text: string): DetectedLang | null {
   const t = text.toLowerCase();
   if (/[Ѐ-ӿ]/.test(t)) return "uk"; // Cyrillic → Ukrainian
   if (/[äöüß]/.test(t)) return "de";
-  const de = (
-    t.match(
-      /\b(der|die|das|und|ich|nicht|ist|ein|eine|mit|auf|für|sie|wir|aber|auch|sehr|was|wenn|weil|dass|schon|noch|immer|kein|habe|haben|sind|wird|nach|über|oder|als|bei|nur)\b/g
-    ) || []
-  ).length;
-  const en = (
-    t.match(
-      /\b(the|and|is|are|you|to|of|in|it|that|this|with|for|was|have|not|but|they|we|he|she|on|at|my|your|from|what|when|because|would|there|about)\b/g
-    ) || []
-  ).length;
-  if (de > en) return "de";
-  if (en > de) return "en";
-  return null;
+  let best: DetectedLang | null = null;
+  let bestCount = 0;
+  for (const lang of Object.keys(LANG_WORDS) as Exclude<Lang, "uk">[]) {
+    const count = (t.match(LANG_WORDS[lang]) || []).length;
+    if (count > bestCount) {
+      best = lang;
+      bestCount = count;
+    }
+  }
+  return best;
 }
 
 function pickVoice(lang: Lang): SpeechSynthesisVoice | null {
@@ -474,7 +502,17 @@ export function TranslatorDemo({ isAuthenticated }: { isAuthenticated: boolean }
         if (!res.ok) return;
         const { text, language } = await res.json();
         if (language && langRef.current === "auto") {
-          const map: Record<string, DetectedLang> = { english: "en", german: "de", ukrainian: "uk" };
+          const map: Record<string, DetectedLang> = {
+            english: "en",
+            german: "de",
+            ukrainian: "uk",
+            french: "fr",
+            polish: "pl",
+            spanish: "es",
+            latin: "la",
+            italian: "it",
+            swedish: "sv",
+          };
           const d = map[String(language).toLowerCase()];
           if (d) setDetectedLang(d);
         }

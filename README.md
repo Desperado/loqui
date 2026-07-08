@@ -4,8 +4,9 @@
 [![Next.js](https://img.shields.io/badge/Next.js-15-black)](https://nextjs.org/)
 [![Deploy on Railway](https://img.shields.io/badge/Deploy-Railway-8b5cf6)](https://railway.app/)
 
-Instant **streaming voice translation** between **German, English, and Ukrainian** — speak in
-any of the three, get a live translation in another, routed through ultra-fast LLMs
+Instant **streaming voice translation** across **9 languages** — German, English, Ukrainian,
+French, Polish, Spanish, Latin, Italian, and Swedish — speak in any of them, get a live
+translation in another, routed through ultra-fast LLMs
 (Cerebras, Groq, Google Gemini, OpenAI). Optional server-side speech recognition (Whisper) and
 voice dubbing (OpenAI TTS) make it work in any browser.
 
@@ -13,7 +14,8 @@ See [plan.md](plan.md) for the architecture write-up.
 
 ## Features
 
-- **Any-direction translation** among 🇩🇪 German, 🇬🇧 English, 🇺🇦 Ukrainian, with an **Auto**
+- **Any-direction translation** among 🇩🇪 German, 🇬🇧 English, 🇺🇦 Ukrainian, 🇫🇷 French, 🇵🇱 Polish,
+  🇪🇸 Spanish, 🏛️ Latin, 🇮🇹 Italian, and 🇸🇪 Swedish, with an **Auto**
   source mode that detects the spoken language for you.
 - **Live streaming** — finalized speech streams token-by-token; interim speech gets a debounced
   preview. Per-segment time-to-first-token is shown (typically ~150–300 ms).

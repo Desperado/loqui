@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { addMessage, getConversation } from "@/lib/db";
+import { isLang } from "@/lib/translate";
 
 export const dynamic = "force-dynamic";
 
@@ -22,7 +23,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const message = addMessage(id, {
     source_text: sourceText,
     translated_text: translatedText,
-    source_lang: body.sourceLang === "de" ? "de" : "en",
+    source_lang: typeof body.sourceLang === "string" && isLang(body.sourceLang) ? body.sourceLang : "en",
     model: String(body.model ?? "").slice(0, 80),
     latency_ms: Number.isFinite(body.latencyMs) ? Math.round(body.latencyMs) : null,
   });

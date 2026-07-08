@@ -1,4 +1,5 @@
 import { NextRequest } from "next/server";
+import { isLang } from "@/lib/translate";
 
 export const dynamic = "force-dynamic";
 
@@ -82,7 +83,7 @@ function filterHallucination(
 
 /**
  * POST /api/transcribe  (multipart form-data)
- * Fields: file=<audio blob>, sourceLang="auto"|"de"|"en"|"uk"
+ * Fields: file=<audio blob>, sourceLang="auto"|<Lang>
  * Server-side speech-to-text via OpenAI Whisper. Returns { text, language }.
  * Language is auto-detected by Whisper; a non-auto sourceLang is passed as a hint.
  */
@@ -112,7 +113,7 @@ export async function POST(req: NextRequest) {
   upstream.append("file", file, "audio.webm");
   upstream.append("model", "whisper-1");
   upstream.append("response_format", "verbose_json");
-  if (sourceLang === "de" || sourceLang === "en" || sourceLang === "uk") {
+  if (isLang(sourceLang)) {
     upstream.append("language", sourceLang);
   }
 

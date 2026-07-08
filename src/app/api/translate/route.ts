@@ -1,13 +1,13 @@
 import { NextRequest } from "next/server";
-import { streamChat, translationSystemPrompt, type SourceLang, type Lang } from "@/lib/translate";
+import { streamChat, translationSystemPrompt, isLang, type SourceLang, type Lang } from "@/lib/translate";
 import { getModel, isModelEnabled } from "@/lib/models";
 
 export const dynamic = "force-dynamic";
 
 /**
  * POST /api/translate
- * Body: { text: string, sourceLang: "de" | "en", model: string }
- * Streams the Ukrainian translation as plain text chunks.
+ * Body: { text: string, sourceLang: SourceLang, model: string }
+ * Streams the translation as plain text chunks.
  */
 export async function POST(req: NextRequest) {
   let body: { text?: string; sourceLang?: string; targetLang?: string; model?: string };
@@ -19,15 +19,8 @@ export async function POST(req: NextRequest) {
 
   const text = (body.text ?? "").trim();
   const sourceLang: SourceLang =
-    body.sourceLang === "de"
-      ? "de"
-      : body.sourceLang === "en"
-        ? "en"
-        : body.sourceLang === "uk"
-          ? "uk"
-          : "auto";
-  const targetLang: Lang =
-    body.targetLang === "de" ? "de" : body.targetLang === "en" ? "en" : "uk";
+    body.sourceLang && isLang(body.sourceLang) ? body.sourceLang : "auto";
+  const targetLang: Lang = body.targetLang && isLang(body.targetLang) ? body.targetLang : "uk";
   const modelId = body.model ?? "";
 
   if (!text) return new Response("Missing text", { status: 400 });

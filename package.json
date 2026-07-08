@@ -2,7 +2,7 @@
   "name": "loqui",
   "version": "0.1.0",
   "private": true,
-  "description": "Instant streaming voice translation between German, English and Ukrainian with multi-model routing, server-side Whisper STT/TTS, and evals",
+  "description": "Instant streaming voice translation across 9 languages with multi-model routing, server-side Whisper STT/TTS, and evals",
   "license": "MIT",
   "author": "Ruslan Strazhnyk",
   "homepage": "https://github.com/Desperado/loqui#readme",
