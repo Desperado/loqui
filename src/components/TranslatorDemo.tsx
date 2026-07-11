@@ -660,6 +660,16 @@ export function TranslatorDemo({ isAuthenticated }: { isAuthenticated: boolean }
     pushToDisplay("clear");
   };
 
+  const swapLanguages = () => {
+    if (sourceLang === "auto") return;
+    const nextSource = targetLang;
+    setTargetLang(sourceLang);
+    setSourceLang(nextSource);
+    resetSttLang();
+    stopSpeaking();
+    if (listening) stopListening();
+  };
+
   const enabledCount = models.filter((m) => m.enabled).length;
 
   const heardLabel =
@@ -672,44 +682,51 @@ export function TranslatorDemo({ isAuthenticated }: { isAuthenticated: boolean }
   return (
     <div className="space-y-4">
       {/* Controls */}
-      <div className="flex flex-col items-center gap-4 bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-4">
-        <div className="flex flex-wrap items-center justify-center gap-3">
-          <div className="flex rounded-lg overflow-hidden border border-slate-300 dark:border-slate-700" role="group" aria-label="Source language">
-            {SOURCE_OPTIONS.map((lang) => (
-              <button
-                key={lang}
-                onClick={() => {
-                  setSourceLang(lang);
-                  resetSttLang();
-                  if (listening) stopListening();
-                }}
-                className={`px-3 py-2 text-sm font-medium ${
-                  sourceLang === lang ? "bg-indigo-600 text-white" : "bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/50"
-                }`}
-              >
-                {LANG_FLAG[lang]} {lang === "auto" ? "Auto" : LANG_LABEL[lang]}
-              </button>
-            ))}
-          </div>
-          <span className="text-slate-400 dark:text-slate-500">→</span>
-          <div className="flex rounded-lg overflow-hidden border border-slate-300 dark:border-slate-700" role="group" aria-label="Target language">
-            {TARGET_OPTIONS.map((lang) => (
-              <button
-                key={lang}
-                onClick={() => {
-                  setTargetLang(lang);
-                  stopSpeaking();
-                }}
-                className={`px-3 py-2 text-sm font-medium ${
-                  targetLang === lang ? "bg-indigo-600 text-white" : "bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/50"
-                }`}
-              >
-                {LANG_FLAG[lang]} {LANG_LABEL[lang]}
-              </button>
-            ))}
-          </div>
+      <div className="rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-800">
+        <div className="grid items-end gap-3 md:grid-cols-[minmax(0,1fr)_48px_minmax(0,1fr)]">
+          <label className="rounded-lg border border-slate-200 bg-slate-50 p-3 transition focus-within:border-indigo-500 focus-within:ring-2 focus-within:ring-indigo-500/20 dark:border-slate-700 dark:bg-slate-900/50">
+            <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">I speak</span>
+            <select
+              value={sourceLang}
+              onChange={(event) => {
+                setSourceLang(event.target.value as SourceLang);
+                resetSttLang();
+                if (listening) stopListening();
+              }}
+              className="w-full cursor-pointer bg-transparent text-base font-semibold text-slate-900 outline-none dark:text-white"
+              aria-label="Source language"
+            >
+              {SOURCE_OPTIONS.map((lang) => <option key={lang} value={lang}>{LANG_FLAG[lang]} {lang === "auto" ? "Auto detect" : LANG_LABEL[lang]}</option>)}
+            </select>
+          </label>
+          <button
+            onClick={swapLanguages}
+            disabled={sourceLang === "auto"}
+            className="mx-auto hidden h-12 w-12 items-center justify-center rounded-full border border-slate-200 bg-white text-xl text-indigo-600 shadow-sm transition hover:border-indigo-300 hover:bg-indigo-50 disabled:cursor-not-allowed disabled:opacity-35 dark:border-slate-700 dark:bg-slate-800 dark:text-indigo-300 dark:hover:bg-indigo-950/30 md:inline-flex"
+            aria-label="Swap source and target languages"
+            title={sourceLang === "auto" ? "Choose a source language to swap" : "Swap languages"}
+          >
+            ⇄
+          </button>
+          <label className="rounded-lg border border-slate-200 bg-slate-50 p-3 transition focus-within:border-indigo-500 focus-within:ring-2 focus-within:ring-indigo-500/20 dark:border-slate-700 dark:bg-slate-900/50">
+            <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Translate to</span>
+            <select
+              value={targetLang}
+              onChange={(event) => {
+                setTargetLang(event.target.value as Lang);
+                stopSpeaking();
+              }}
+              className="w-full cursor-pointer bg-transparent text-base font-semibold text-slate-900 outline-none dark:text-white"
+              aria-label="Target language"
+            >
+              {TARGET_OPTIONS.map((lang) => <option key={lang} value={lang}>{LANG_FLAG[lang]} {LANG_LABEL[lang]}</option>)}
+            </select>
+          </label>
         </div>
-        <ModelSelector models={models} value={model} onChange={setModel} />
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-3 dark:border-slate-700">
+          <p className="text-xs text-slate-500 dark:text-slate-400">{sourceLang === "auto" ? "Loqui detects the spoken language automatically." : `${LANG_LABEL[sourceLang]} → ${LANG_LABEL[targetLang]}`}</p>
+          <ModelSelector models={models} value={model} onChange={setModel} className="min-w-0 py-1.5 text-xs" />
+        </div>
       </div>
 
       {enabledCount === 0 && models.length > 0 && (
