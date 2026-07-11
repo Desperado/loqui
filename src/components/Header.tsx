@@ -16,6 +16,9 @@ export async function Header() {
             <Link href="/" className="hover:text-indigo-600 dark:hover:text-indigo-400">
               Translate
             </Link>
+            <Link href="/humanize" className="hover:text-indigo-600 dark:hover:text-indigo-400">
+              Humanize
+            </Link>
             <Link href="/history" className="hover:text-indigo-600 dark:hover:text-indigo-400">
               History
             </Link>

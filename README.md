@@ -1,5 +1,7 @@
 # 🎙️ Loqui
 
+Loqui includes a **Humanize** writing workspace at `/humanize`: a streaming, meaning-preserving rewrite tool with conversational, crisp, warm, and polished voices. It reuses the existing Groq and Cerebras model routing; configure either provider key as usual.
+
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Next.js](https://img.shields.io/badge/Next.js-15-black)](https://nextjs.org/)
 [![Deploy on Railway](https://img.shields.io/badge/Deploy-Railway-8b5cf6)](https://railway.app/)

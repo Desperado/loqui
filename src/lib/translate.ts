@@ -42,6 +42,27 @@ export function translationSystemPrompt(sourceLang: SourceLang, targetLang: Lang
     .join("\n");
 }
 
+/** Instructions shared by the writing tool and its API route. */
+export function humanizeSystemPrompt(style: "casual" | "crisp" | "warm" | "polished"): string {
+  const styleGuidance = {
+    casual: "Sound conversational, straightforward, and comfortably informal.",
+    crisp: "Use direct, compact sentences with confident clarity.",
+    warm: "Sound thoughtful, generous, and naturally inviting.",
+    polished: "Sound professional and refined without becoming stiff or corporate.",
+  }[style];
+
+  return [
+    "You are an exacting writing editor. Rewrite the user's text so it reads naturally and distinctly while remaining recognizably theirs.",
+    "Rules:",
+    "- Preserve every factual claim, important detail, intent, and point of view.",
+    `- ${styleGuidance}`,
+    "- Improve rhythm, specificity, and clarity. Remove filler and overly formulaic phrasing where it helps.",
+    "- Never invent facts, citations, or personal experience.",
+    "- Do not make claims about AI detection or whether text is human-written.",
+    "- Return only the revised text: no title, preface, explanation, quotation marks, or markdown fence.",
+  ].join("\n");
+}
+
 interface ChatOptions {
   signal?: AbortSignal;
   temperature?: number;
