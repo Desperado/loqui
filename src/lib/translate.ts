@@ -42,38 +42,66 @@ export function translationSystemPrompt(sourceLang: SourceLang, targetLang: Lang
     .join("\n");
 }
 
-/** Instructions shared by the writing tool and its API route. */
-export function humanizeSystemPrompt(style: "casual" | "crisp" | "warm" | "polished"): string {
-  const styleGuidance = {
-    casual: "Sound conversational, straightforward, and comfortably informal.",
-    crisp: "Use direct, compact sentences with confident clarity.",
-    warm: "Sound thoughtful, generous, and naturally inviting.",
-    polished: "Sound professional and refined without becoming stiff or corporate.",
-  }[style];
-
-  return [
-    "You are an exacting writing editor. Rewrite the user's text so it reads naturally and distinctly while remaining recognizably theirs.",
-    "Rules:",
-    "- Preserve every factual claim, important detail, intent, and point of view.",
-    `- ${styleGuidance}`,
-    "- Improve rhythm, specificity, and clarity. Remove filler and overly formulaic phrasing where it helps.",
-    "- Never invent facts, citations, or personal experience.",
-    "- Do not make claims about AI detection or whether text is human-written.",
-    "- Return only the revised text: no title, preface, explanation, quotation marks, or markdown fence.",
-  ].join("\n");
-}
-
-interface ChatOptions {
+export interface ChatOptions {
   signal?: AbortSignal;
   temperature?: number;
   maxTokens?: number;
+  /** Per-attempt deadline. The default is deliberately short enough for agent workflows. */
+  timeoutMs?: number;
+  /** Retries only transient provider/network failures. */
+  retries?: number;
+  retryDelayMs?: number;
+}
+
+export type ChatMessage = { role: string; content: string };
+
+const RETRYABLE_STATUS = new Set([408, 409, 425, 429, 500, 502, 503, 504]);
+
+export class ProviderRequestError extends Error {
+  constructor(
+    message: string,
+    readonly retryable: boolean,
+    readonly status?: number
+  ) {
+    super(message);
+    this.name = "ProviderRequestError";
+  }
+}
+
+function attemptSignal(signal: AbortSignal | undefined, timeoutMs: number) {
+  const controller = new AbortController();
+  const timer = setTimeout(
+    () => controller.abort(new DOMException("Provider request timed out", "TimeoutError")),
+    timeoutMs
+  );
+  const combined = signal ? AbortSignal.any([signal, controller.signal]) : controller.signal;
+  return { signal: combined, cleanup: () => clearTimeout(timer), timedOut: () => controller.signal.aborted };
+}
+
+async function retryDelay(ms: number, signal?: AbortSignal) {
+  if (ms <= 0) return;
+  await new Promise<void>((resolve, reject) => {
+    const finish = () => {
+      signal?.removeEventListener("abort", abort);
+      resolve();
+    };
+    const timer = setTimeout(finish, ms);
+    const abort = () => {
+      clearTimeout(timer);
+      signal?.removeEventListener("abort", abort);
+      reject(new ProviderRequestError("Request cancelled", false));
+    };
+    if (signal?.aborted) abort();
+    else signal?.addEventListener("abort", abort, { once: true });
+  });
 }
 
 function providerRequest(
   spec: ModelSpec,
-  messages: { role: string; content: string }[],
+  messages: ChatMessage[],
   stream: boolean,
-  opts: ChatOptions
+  opts: ChatOptions,
+  signal: AbortSignal
 ): Request {
   const provider = PROVIDERS[spec.provider];
   const apiKey = process.env[provider.envKey];
@@ -93,8 +121,50 @@ function providerRequest(
       temperature: opts.temperature ?? 0.2,
       max_tokens: opts.maxTokens ?? 1024,
     }),
-    signal: opts.signal ?? null,
+    signal,
   });
+}
+
+async function fetchProvider(
+  spec: ModelSpec,
+  messages: ChatMessage[],
+  stream: boolean,
+  opts: ChatOptions
+): Promise<{ response: Response; cleanup: () => void }> {
+  const retries = Math.max(0, opts.retries ?? 1);
+  const timeoutMs = Math.max(1, opts.timeoutMs ?? 15_000);
+  let lastError: ProviderRequestError | undefined;
+
+  for (let attempt = 0; attempt <= retries; attempt += 1) {
+    const deadline = attemptSignal(opts.signal, timeoutMs);
+    try {
+      const response = await fetch(providerRequest(spec, messages, stream, opts, deadline.signal));
+      if (response.ok) return { response, cleanup: deadline.cleanup };
+
+      const retryable = RETRYABLE_STATUS.has(response.status);
+      response.body?.cancel().catch(() => undefined);
+      lastError = new ProviderRequestError(
+        `${spec.label} request failed with status ${response.status}`,
+        retryable,
+        response.status
+      );
+    } catch (error) {
+      if (opts.signal?.aborted) {
+        deadline.cleanup();
+        throw new ProviderRequestError("Request cancelled", false);
+      }
+      lastError = new ProviderRequestError(
+        deadline.timedOut() ? `${spec.label} request timed out` : `${spec.label} is temporarily unavailable`,
+        true
+      );
+    }
+    deadline.cleanup();
+
+    if (!lastError.retryable || attempt === retries) throw lastError;
+    await retryDelay((opts.retryDelayMs ?? 250) * 2 ** attempt, opts.signal);
+  }
+
+  throw lastError ?? new ProviderRequestError(`${spec.label} is temporarily unavailable`, true);
 }
 
 /**
@@ -103,16 +173,16 @@ function providerRequest(
  */
 export async function* streamChat(
   modelId: string,
-  messages: { role: string; content: string }[],
+  messages: ChatMessage[],
   opts: ChatOptions = {}
 ): AsyncGenerator<string> {
   const spec = getModel(modelId);
   if (!spec) throw new Error(`Unknown model: ${modelId}`);
 
-  const res = await fetch(providerRequest(spec, messages, true, opts));
-  if (!res.ok || !res.body) {
-    const detail = await res.text().catch(() => "");
-    throw new Error(`${spec.label} error ${res.status}: ${detail.slice(0, 300)}`);
+  const { response: res, cleanup } = await fetchProvider(spec, messages, true, opts);
+  if (!res.body) {
+    cleanup();
+    throw new ProviderRequestError(`${spec.label} returned an empty response`, true);
   }
 
   const reader = res.body.getReader();
@@ -141,25 +211,33 @@ export async function* streamChat(
     }
   } finally {
     reader.releaseLock();
+    cleanup();
   }
 }
 
 /** Non-streaming completion (used by evals). */
 export async function completeChat(
   modelId: string,
-  messages: { role: string; content: string }[],
+  messages: ChatMessage[],
   opts: ChatOptions = {}
 ): Promise<string> {
   const spec = getModel(modelId);
   if (!spec) throw new Error(`Unknown model: ${modelId}`);
 
-  const res = await fetch(providerRequest(spec, messages, false, opts));
-  if (!res.ok) {
-    const detail = await res.text().catch(() => "");
-    throw new Error(`${spec.label} error ${res.status}: ${detail.slice(0, 300)}`);
+  const { response: res, cleanup } = await fetchProvider(spec, messages, false, opts);
+  try {
+    const json = await res.json();
+    const content = json.choices?.[0]?.message?.content;
+    if (typeof content !== "string" || !content.trim()) {
+      throw new ProviderRequestError(`${spec.label} returned an invalid response`, true);
+    }
+    return content.trim();
+  } catch (error) {
+    if (error instanceof ProviderRequestError) throw error;
+    throw new ProviderRequestError(`${spec.label} returned an invalid response`, true);
+  } finally {
+    cleanup();
   }
-  const json = await res.json();
-  return (json.choices?.[0]?.message?.content ?? "").trim();
 }
 
 export async function translateOnce(
