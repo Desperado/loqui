@@ -1,6 +1,6 @@
 # 🎙️ Loqui
 
-Loqui includes a **Humanize** writing workspace at `/humanize`: a streaming, meaning-preserving rewrite tool with conversational, crisp, warm, and polished voices. It reuses the existing Groq and Cerebras model routing; configure either provider key as usual.
+Loqui includes a **Humanize** writing workspace at `/humanize`: a meaning-preserving rewrite tool with conversational, crisp, warm, and polished voices. The same validated engine is available to AI agents through a local MCP server. It reuses the existing Groq and Cerebras model routing; configure either provider key as usual.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Next.js](https://img.shields.io/badge/Next.js-15-black)](https://nextjs.org/)
@@ -59,6 +59,7 @@ Voice input works best in Chrome or Edge; the ☁️ Whisper engine works anywhe
 | `AUTH_GITHUB_ID` / `AUTH_GITHUB_SECRET` | GitHub OAuth app (callback: `<origin>/api/auth/callback/github`) |
 | `CEREBRAS_API_KEY` | Cerebras — Gemma 4 31B, GPT-OSS 120B (ultra-fast) |
 | `GROQ_API_KEY` | Groq — Llama 3.1 8B Instant, Llama 3.3 70B |
+| `LOQUI_HUMANIZE_MODEL` | Optional server-side preferred Groq/Cerebras model ID for MCP humanization |
 | `GOOGLE_AI_API_KEY` | Google — Gemini 3.1 Flash Lite, Gemini 2.5 Flash |
 | `OPENAI_API_KEY` | OpenAI — GPT-4o mini translation, **Whisper STT** and **TTS dubbing** |
 | `LOQUI_DB_PATH` | Optional — SQLite path (default `./data/loqui.db`) |
@@ -67,6 +68,19 @@ Voice input works best in Chrome or Edge; the ☁️ Whisper engine works anywhe
 Set at least one provider key — models auto-enable based on which keys are present.
 Server-side speech-to-text and text-to-speech require `OPENAI_API_KEY`. The demo works without
 signing in; GitHub login is only needed to save history.
+
+## MCP server
+
+The local stdio MCP server exposes `humanize_text`, `humanize_batch`, and
+`validate_humanization`. It loads Loqui's normal server-only environment configuration, emits
+only MCP frames on stdout, and neither logs nor stores submitted text.
+
+```bash
+npm run mcp
+```
+
+See [docs/mcp.md](docs/mcp.md) for client configuration, complete schemas, examples, privacy
+behavior, and troubleshooting.
 
 ## Deployment (Railway)
 
@@ -87,6 +101,9 @@ npm run dev      # dev server
 npm run build    # production build
 npm start        # run the production build
 npm run lint     # lint
+npm run mcp      # local stdio MCP server
+npm test         # unit and MCP integration tests
+npm run typecheck
 ```
 
 ## Contributing
