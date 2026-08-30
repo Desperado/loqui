@@ -110,7 +110,13 @@ export async function POST(req: NextRequest) {
   const sourceLang = String(form.get("sourceLang") ?? "auto");
 
   const upstream = new FormData();
-  upstream.append("file", file, "audio.webm");
+  const incomingName = (file as Blob & { name?: unknown }).name;
+  const extension =
+    typeof incomingName === "string"
+      ? incomingName.trim().match(/\.(flac|m4a|mp3|mp4|mpeg|mpga|ogg|wav|webm)$/i)?.[0].toLowerCase()
+      : undefined;
+  const fileName = `audio${extension ?? ".webm"}`;
+  upstream.append("file", file, fileName);
   upstream.append("model", "whisper-1");
   upstream.append("response_format", "verbose_json");
   if (isLang(sourceLang)) {
