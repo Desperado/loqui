@@ -17,6 +17,19 @@ export const LANG_NAMES: Record<Lang, string> = {
 
 export const LANGS = Object.keys(LANG_NAMES) as Lang[];
 
+export const LANG_FLAGS: Record<SourceLang, string> = {
+  auto: "🌐",
+  de: "🇩🇪",
+  en: "🇬🇧",
+  uk: "🇺🇦",
+  fr: "🇫🇷",
+  pl: "🇵🇱",
+  es: "🇪🇸",
+  la: "🏛️",
+  it: "🇮🇹",
+  sv: "🇸🇪",
+};
+
 export function isLang(value: string): value is Lang {
   return (LANGS as string[]).includes(value);
 }

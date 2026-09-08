@@ -4,7 +4,10 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { ModelSelector, type ModelInfo } from "@/components/ModelSelector";
 import { VoiceSelector } from "@/components/VoiceSelector";
 import { DEFAULT_PERSONA_ID, personaVoice } from "@/lib/voices";
-import { LANGS, LANG_NAMES, type Lang, type SourceLang } from "@/lib/translate";
+import { LANG_FLAGS, LANGS, LANG_NAMES, type Lang, type SourceLang } from "@/lib/translate";
+import { useBrowserProfile } from "@/components/BrowserProfileProvider";
+import { preferredTranslationPair } from "@/lib/browserProfile";
+import { localizedLanguageNames } from "@/lib/i18n";
 
 type DetectedLang = Lang;
 
@@ -29,19 +32,6 @@ const SPEECH_LANG: Record<Lang, string> = {
   sv: "sv-SE",
 };
 const LANG_LABEL: Record<Lang, string> = LANG_NAMES;
-const LANG_FLAG: Record<SourceLang, string> = {
-  auto: "🌐",
-  de: "🇩🇪",
-  en: "🇬🇧",
-  uk: "🇺🇦",
-  fr: "🇫🇷",
-  pl: "🇵🇱",
-  es: "🇪🇸",
-  la: "🏛️",
-  it: "🇮🇹",
-  sv: "🇸🇪",
-};
-
 const SOURCE_OPTIONS: SourceLang[] = ["auto", ...LANGS];
 const TARGET_OPTIONS: Lang[] = LANGS;
 
@@ -91,6 +81,7 @@ let segmentCounter = 0;
 const nextSegmentId = () => `seg-${++segmentCounter}-${Date.now()}`;
 
 export function TranslatorDemo({ isAuthenticated }: { isAuthenticated: boolean }) {
+  const { locale, isMobile, ready: profileReady, t } = useBrowserProfile();
   const [models, setModels] = useState<ModelInfo[]>([]);
   const [model, setModel] = useState("");
   const [sourceLang, setSourceLang] = useState<SourceLang>("auto");
@@ -129,12 +120,24 @@ export function TranslatorDemo({ isAuthenticated }: { isAuthenticated: boolean }
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
+  const profileAppliedRef = useRef(false);
   langRef.current = sourceLang;
   targetRef.current = targetLang;
   modelRef.current = model;
   autoSpeakRef.current = autoSpeak;
   personaIdRef.current = personaId;
   sendToDisplayRef.current = sendToDisplay;
+
+  // Apply browser preferences once. Microphone capture still starts only after
+  // a user gesture, but mobile visitors land on the compatible Whisper engine.
+  useEffect(() => {
+    if (!profileReady || profileAppliedRef.current) return;
+    profileAppliedRef.current = true;
+    const pair = preferredTranslationPair(locale);
+    setSourceLang(pair.sourceLang);
+    setTargetLang(pair.targetLang);
+    if (isMobile) setEngine("server");
+  }, [isMobile, locale, profileReady]);
 
   // ---- External display broadcast (LED ticker / kiosk page on /display) ----
   const pushToDisplay = useCallback((kind: "final" | "interim" | "clear", text = "") => {
@@ -459,7 +462,7 @@ export function TranslatorDemo({ isAuthenticated }: { isAuthenticated: boolean }
     };
     rec.onerror = (ev) => {
       if (ev.error === "not-allowed") {
-        setStatusMsg("Microphone access denied — allow the microphone or type below.");
+        setStatusMsg(t("micDenied"));
         stopListening();
       } else if (ev.error === "no-speech") {
         // benign; recognition auto-restarts via onend
@@ -483,7 +486,7 @@ export function TranslatorDemo({ isAuthenticated }: { isAuthenticated: boolean }
     listeningRef.current = true;
     setListening(true);
     rec.start();
-  }, [stopListening, translateInterim, translateSegment]);
+  }, [stopListening, t, translateInterim, translateSegment]);
 
   // ---- Server STT (OpenAI Whisper): record utterances (cut on pause), transcribe, translate ----
   const MONITOR_MS = 100;
@@ -596,9 +599,9 @@ export function TranslatorDemo({ isAuthenticated }: { isAuthenticated: boolean }
       setListening(true);
       cycleRecord();
     } catch {
-      setStatusMsg("Microphone access denied — allow the microphone or type below.");
+      setStatusMsg(t("micDenied"));
     }
-  }, [cycleRecord]);
+  }, [cycleRecord, t]);
 
   const stopServerListening = useCallback(() => {
     listeningRef.current = false;
@@ -667,72 +670,78 @@ export function TranslatorDemo({ isAuthenticated }: { isAuthenticated: boolean }
     setSourceLang(nextSource);
     resetSttLang();
     stopSpeaking();
-    if (listening) stopListening();
+    if (listening) endListening();
   };
 
   const enabledCount = models.filter((m) => m.enabled).length;
 
+  const languageNames = localizedLanguageNames[locale];
   const heardLabel =
     sourceLang === "auto"
       ? detectedLang
-        ? `${LANG_LABEL[detectedLang]} · auto`
-        : "Source · auto"
-      : LANG_LABEL[sourceLang];
+        ? `${languageNames[detectedLang]} · ${t("autoDetect")}`
+        : t("sourceAuto")
+      : languageNames[sourceLang];
 
   return (
     <div className="space-y-4">
       {/* Controls */}
       <div className="rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-800">
-        <div className="grid items-end gap-3 md:grid-cols-[minmax(0,1fr)_48px_minmax(0,1fr)]">
+        <div className="grid items-end gap-2 sm:gap-3 md:grid-cols-[minmax(0,1fr)_48px_minmax(0,1fr)]">
           <label className="rounded-lg border border-slate-200 bg-slate-50 p-3 transition focus-within:border-indigo-500 focus-within:ring-2 focus-within:ring-indigo-500/20 dark:border-slate-700 dark:bg-slate-900/50">
-            <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">I speak</span>
+            <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">{t("iSpeak")}</span>
             <select
               value={sourceLang}
               onChange={(event) => {
                 setSourceLang(event.target.value as SourceLang);
                 resetSttLang();
-                if (listening) stopListening();
+                if (listening) endListening();
               }}
-              className="w-full cursor-pointer bg-transparent text-base font-semibold text-slate-900 outline-none dark:text-white"
-              aria-label="Source language"
+              className="min-h-11 w-full cursor-pointer bg-transparent text-base font-semibold text-slate-900 outline-none dark:text-white"
+              aria-label={t("sourceLanguage")}
             >
-              {SOURCE_OPTIONS.map((lang) => <option key={lang} value={lang}>{LANG_FLAG[lang]} {lang === "auto" ? "Auto detect" : LANG_LABEL[lang]}</option>)}
+              {SOURCE_OPTIONS.map((lang) => <option key={lang} value={lang}>{LANG_FLAGS[lang]} {lang === "auto" ? t("autoDetect") : languageNames[lang]}</option>)}
             </select>
           </label>
           <button
             onClick={swapLanguages}
             disabled={sourceLang === "auto"}
             className="mx-auto hidden h-12 w-12 items-center justify-center rounded-full border border-slate-200 bg-white text-xl text-indigo-600 shadow-sm transition hover:border-indigo-300 hover:bg-indigo-50 disabled:cursor-not-allowed disabled:opacity-35 dark:border-slate-700 dark:bg-slate-800 dark:text-indigo-300 dark:hover:bg-indigo-950/30 md:inline-flex"
-            aria-label="Swap source and target languages"
-            title={sourceLang === "auto" ? "Choose a source language to swap" : "Swap languages"}
+            aria-label={t("swapLanguages")}
+            title={sourceLang === "auto" ? t("chooseSourceToSwap") : t("swapLanguages")}
           >
             ⇄
           </button>
           <label className="rounded-lg border border-slate-200 bg-slate-50 p-3 transition focus-within:border-indigo-500 focus-within:ring-2 focus-within:ring-indigo-500/20 dark:border-slate-700 dark:bg-slate-900/50">
-            <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Translate to</span>
+            <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">{t("translateTo")}</span>
             <select
               value={targetLang}
               onChange={(event) => {
                 setTargetLang(event.target.value as Lang);
                 stopSpeaking();
               }}
-              className="w-full cursor-pointer bg-transparent text-base font-semibold text-slate-900 outline-none dark:text-white"
-              aria-label="Target language"
+              className="min-h-11 w-full cursor-pointer bg-transparent text-base font-semibold text-slate-900 outline-none dark:text-white"
+              aria-label={t("targetLanguage")}
             >
-              {TARGET_OPTIONS.map((lang) => <option key={lang} value={lang}>{LANG_FLAG[lang]} {LANG_LABEL[lang]}</option>)}
+              {TARGET_OPTIONS.map((lang) => <option key={lang} value={lang}>{LANG_FLAGS[lang]} {languageNames[lang]}</option>)}
             </select>
           </label>
         </div>
         <div className="mt-3 flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-3 dark:border-slate-700">
-          <p className="text-xs text-slate-500 dark:text-slate-400">{sourceLang === "auto" ? "Loqui detects the spoken language automatically." : `${LANG_LABEL[sourceLang]} → ${LANG_LABEL[targetLang]}`}</p>
-          <ModelSelector models={models} value={model} onChange={setModel} className="min-w-0 py-1.5 text-xs" />
+          <p className="text-xs text-slate-500 dark:text-slate-400">{sourceLang === "auto" ? t("profileHint") : `${languageNames[sourceLang]} → ${languageNames[targetLang]}`}</p>
+          <ModelSelector models={models} value={model} onChange={setModel} label={t("translationModel")} unavailableLabel={t("noApiKey")} className="min-w-0 py-1.5 text-xs" />
         </div>
       </div>
 
+      {profileReady && isMobile && engine === "server" && (
+        <p className="rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2 text-center text-xs text-indigo-700 dark:border-indigo-900 dark:bg-indigo-950/40 dark:text-indigo-300" role="status">
+          ☁️ {t("mobileWhisper")}
+        </p>
+      )}
+
       {enabledCount === 0 && models.length > 0 && (
         <div className="rounded-lg bg-amber-50 dark:bg-amber-950 border border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-200 text-sm px-4 py-3">
-          No model API keys configured. Add <code>CEREBRAS_API_KEY</code>, <code>GROQ_API_KEY</code>,{" "}
-          <code>GOOGLE_AI_API_KEY</code> or <code>OPENAI_API_KEY</code> to <code>.env</code> to enable translation.
+          {t("modelsUnavailable")}
         </div>
       )}
 
@@ -741,51 +750,51 @@ export function TranslatorDemo({ isAuthenticated }: { isAuthenticated: boolean }
         <button
           onClick={listening ? endListening : beginListening}
           disabled={!model || (engine === "browser" && !speechSupported)}
-          className={`w-20 h-20 rounded-full text-3xl flex items-center justify-center transition-colors ${
+          className={`flex h-20 w-20 touch-manipulation items-center justify-center rounded-full text-3xl transition-colors ${
             listening ? "bg-red-500 text-white recording" : "bg-indigo-600 text-white hover:bg-indigo-500"
           } disabled:opacity-40 disabled:cursor-not-allowed`}
-          aria-label={listening ? "Stop listening" : "Start listening"}
+          aria-label={listening ? t("stopListening") : t("startListening")}
         >
           {listening ? "■" : "🎙️"}
         </button>
         <p className="text-sm text-slate-500 dark:text-slate-400">
           {listening
-            ? `Listening (${
+            ? `${t("listening")} (${
                 sourceLang === "auto"
                   ? detectedLang
-                    ? `auto · ${LANG_LABEL[detectedLang]}`
-                    : "auto-detecting…"
-                  : LANG_LABEL[sourceLang]
-              }) → ${LANG_LABEL[targetLang]}… ${engine === "server" ? "speak naturally, pause between sentences" : "speak naturally"}`
+                    ? `${t("autoDetect")} · ${languageNames[detectedLang]}`
+                    : t("autoDetecting")
+                  : languageNames[sourceLang]
+              }) → ${languageNames[targetLang]}… ${engine === "server" ? t("pauseBetween") : t("speakNaturally")}`
             : engine === "browser" && !speechSupported
-              ? "Live recognition isn't supported here — switch to ☁️ Whisper below, or type."
-              : "Tap to speak"}
+              ? t("unsupported")
+              : t("tapToSpeak")}
         </p>
         {statusMsg && <p className="text-sm text-red-600 dark:text-red-400">{statusMsg}</p>}
       </div>
 
       {/* Typed fallback */}
-      <form onSubmit={handleTypedSubmit} className="flex gap-2">
+      <form onSubmit={handleTypedSubmit} className="flex flex-col gap-2 sm:flex-row">
         <input
           value={typedText}
           onChange={(e) => setTypedText(e.target.value)}
-          placeholder={`Or type ${sourceLang === "auto" ? "any" : LANG_LABEL[sourceLang]} text and press Enter…`}
-          className="flex-1 rounded-lg border border-slate-300 dark:border-slate-700 px-4 py-2.5 text-sm bg-white dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          placeholder={t("typePlaceholder")}
+          className="min-h-11 min-w-0 flex-1 rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-base focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:border-slate-700 dark:bg-slate-800 sm:text-sm"
         />
         <button
           type="submit"
           disabled={!typedText.trim() || !model}
-          className="rounded-lg bg-indigo-600 text-white px-4 py-2 text-sm font-medium hover:bg-indigo-500 disabled:opacity-40"
+          className="min-h-11 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500 disabled:opacity-40"
         >
-          Translate
+          {t("translate")}
         </button>
       </form>
 
       {/* Transcript panes */}
-      <div className="grid md:grid-cols-2 gap-4">
-        <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-4 min-h-48">
+      <div className="grid gap-3 sm:gap-4 md:grid-cols-2">
+        <div className="min-h-36 rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-800 sm:min-h-48">
           <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500 mb-3">
-            {heardLabel} (heard)
+            {heardLabel} ({t("heard")})
           </h2>
           <div className="space-y-2 text-slate-800 dark:text-slate-100">
             {segments.map((s) => (
@@ -793,13 +802,13 @@ export function TranslatorDemo({ isAuthenticated }: { isAuthenticated: boolean }
             ))}
             {interim && <p className="text-slate-400 dark:text-slate-500 italic">{interim}</p>}
             {segments.length === 0 && !interim && (
-              <p className="text-slate-300 dark:text-slate-600 text-sm">Your speech will appear here…</p>
+              <p className="text-slate-300 dark:text-slate-600 text-sm">{t("speechEmpty")}</p>
             )}
           </div>
         </div>
-        <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-4 min-h-48">
+        <div className="min-h-36 rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-800 sm:min-h-48">
           <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500 mb-3">
-            {LANG_LABEL[targetLang]}
+            {languageNames[targetLang]}
           </h2>
           <div className="space-y-2 text-slate-800 dark:text-slate-100">
             {segments.map((s) => (
@@ -821,9 +830,9 @@ export function TranslatorDemo({ isAuthenticated }: { isAuthenticated: boolean }
                     )}
                     <button
                       onClick={() => speak(s.target)}
-                      className="opacity-0 group-hover:opacity-100 text-slate-400 dark:text-slate-500 hover:text-indigo-600 dark:hover:text-indigo-400"
-                      title="Speak (dubbing preview)"
-                      aria-label="Speak translation"
+                      className="min-h-11 min-w-11 text-slate-400 hover:text-indigo-600 dark:text-slate-500 dark:hover:text-indigo-400 sm:min-h-0 sm:min-w-0 sm:opacity-0 sm:group-hover:opacity-100"
+                      title={t("speakTranslation")}
+                      aria-label={t("speakTranslation")}
                     >
                       🔊
                     </button>
@@ -833,16 +842,16 @@ export function TranslatorDemo({ isAuthenticated }: { isAuthenticated: boolean }
             ))}
             {liveTranslation && <p className="text-slate-400 dark:text-slate-500 italic">{liveTranslation}</p>}
             {segments.length === 0 && !liveTranslation && (
-              <p className="text-slate-300 dark:text-slate-600 text-sm">Translation will appear here…</p>
+              <p className="text-slate-300 dark:text-slate-600 text-sm">{t("translationEmpty")}</p>
             )}
           </div>
         </div>
       </div>
 
       {/* Footer controls */}
-      <div className="flex flex-wrap items-center justify-between gap-3 text-sm text-slate-500 dark:text-slate-400">
-        <div className="flex flex-wrap items-center gap-4">
-          <label className="flex items-center gap-2">
+      <div className="flex flex-col items-stretch justify-between gap-3 text-sm text-slate-500 dark:text-slate-400 sm:flex-row sm:flex-wrap sm:items-center">
+        <div className="flex flex-col gap-1 sm:flex-row sm:flex-wrap sm:items-center sm:gap-4">
+          <label className="flex min-h-11 items-center gap-2">
             <input
               type="checkbox"
               checked={saveHistory}
@@ -850,9 +859,9 @@ export function TranslatorDemo({ isAuthenticated }: { isAuthenticated: boolean }
               onChange={(e) => setSaveHistory(e.target.checked)}
               className="rounded"
             />
-            Save to history{!isAuthenticated && " (sign in with GitHub to enable)"}
+            {t("saveHistory")}{!isAuthenticated && ` (${t("signInToEnable")})`}
           </label>
-          <label className="flex items-center gap-2">
+          <label className="flex min-h-11 items-center gap-2">
             <input
               type="checkbox"
               checked={autoSpeak}
@@ -862,7 +871,7 @@ export function TranslatorDemo({ isAuthenticated }: { isAuthenticated: boolean }
               }}
               className="rounded"
             />
-            🔊 Auto-play {LANG_LABEL[targetLang]}
+            🔊 {t("autoPlay")} {languageNames[targetLang]}
           </label>
           <VoiceSelector
             value={personaId}
@@ -872,8 +881,8 @@ export function TranslatorDemo({ isAuthenticated }: { isAuthenticated: boolean }
             }}
           />
           <label
-            className="flex items-center gap-2"
-            title="Broadcast translations to connected displays (LED ticker, /display page)"
+            className="flex min-h-11 items-center gap-2"
+            title={t("broadcastHelp")}
           >
             <input
               type="checkbox"
@@ -881,7 +890,7 @@ export function TranslatorDemo({ isAuthenticated }: { isAuthenticated: boolean }
               onChange={(e) => setSendToDisplay(e.target.checked)}
               className="rounded"
             />
-            📺 Send to display
+            📺 {t("sendDisplay")}
             {sendToDisplay && displayListeners !== null && (
               <span
                 className={`text-xs ${
@@ -889,13 +898,13 @@ export function TranslatorDemo({ isAuthenticated }: { isAuthenticated: boolean }
                 }`}
               >
                 {displayListeners > 0
-                  ? `${displayListeners} connected`
-                  : "no displays connected"}
+                  ? `${displayListeners} ${t("connected")}`
+                  : t("noDisplays")}
               </span>
             )}
           </label>
-          <span className="flex items-center gap-1.5">
-            Voice input:
+          <span className="flex min-h-11 flex-wrap items-center gap-1.5">
+            {t("voiceInput")}
             <span className="flex rounded-lg overflow-hidden border border-slate-300 dark:border-slate-700">
               {(["browser", "server"] as const).map((e) => (
                 <button
@@ -904,22 +913,22 @@ export function TranslatorDemo({ isAuthenticated }: { isAuthenticated: boolean }
                     if (listening) endListening();
                     setEngine(e);
                   }}
-                  className={`px-2 py-1 text-xs font-medium ${
+                  className={`min-h-11 px-3 py-2 text-xs font-medium sm:min-h-0 sm:px-2 sm:py-1 ${
                     engine === e
                       ? "bg-indigo-600 text-white"
                       : "bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/50"
                   }`}
-                  title={e === "browser" ? "Live browser recognition (Chrome/Edge)" : "Server-side Whisper — works in any browser"}
+                  title={e === "browser" ? t("liveHelp") : t("whisperHelp")}
                 >
-                  {e === "browser" ? "⚡ Live" : "☁️ Whisper"}
+                  {e === "browser" ? `⚡ ${t("live")}` : `☁️ ${t("whisper")}`}
                 </button>
               ))}
             </span>
           </span>
         </div>
         {segments.length > 0 && (
-          <button onClick={clearAll} className="text-slate-400 dark:text-slate-500 hover:text-red-500 dark:hover:text-red-400">
-            Clear session
+          <button onClick={clearAll} className="min-h-11 self-start text-slate-400 hover:text-red-500 dark:text-slate-500 dark:hover:text-red-400 sm:self-auto">
+            {t("clearSession")}
           </button>
         )}
       </div>

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useBrowserProfile } from "@/components/BrowserProfileProvider";
 
 interface DisplayEvent {
   kind: "final" | "interim" | "clear";
@@ -21,6 +22,7 @@ const INTERIM_HOLD_MS = 5_000;
  * "Send to display" toggle. Pass ?token=… if LOQUI_DISPLAY_TOKEN is set.
  */
 export default function DisplayPage() {
+  const { t } = useBrowserProfile();
   const [finalText, setFinalText] = useState("");
   const [interimText, setInterimText] = useState("");
   const [connected, setConnected] = useState(false);
@@ -88,7 +90,7 @@ export default function DisplayPage() {
     <div className="fixed inset-0 z-50 bg-black flex flex-col items-center justify-center px-[4vw] select-none cursor-none">
       {idle ? (
         <p className="text-slate-700 text-[3vmin] tracking-widest uppercase">
-          Loqui display · {connected ? "waiting for translation…" : "connecting…"}
+          Loqui display · {connected ? t("displayWaiting") : t("displayConnecting")}
         </p>
       ) : (
         <div className="text-center space-y-[2vmin]">
@@ -106,7 +108,7 @@ export default function DisplayPage() {
       )}
       <span
         className={`absolute bottom-[2vmin] right-[2vmin] w-[1.2vmin] h-[1.2vmin] rounded-full ${connected ? "bg-emerald-500" : "bg-red-500 animate-pulse"}`}
-        title={connected ? "Connected" : "Reconnecting…"}
+        title={connected ? t("displayConnected") : t("displayReconnecting")}
       />
     </div>
   );

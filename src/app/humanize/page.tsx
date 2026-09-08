@@ -1,10 +1,15 @@
 import type { Metadata } from "next";
 import { Humanizer } from "@/components/Humanizer";
+import { translate } from "@/lib/i18n";
+import { requestLocale } from "@/lib/requestLocale";
 
-export const metadata: Metadata = {
-  title: "Humanize writing — Loqui",
-  description: "Make a draft clearer and more natural with fast, open models.",
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const locale = await requestLocale();
+  return {
+    title: translate(locale, "humanMetaTitle"),
+    description: translate(locale, "humanMetaDescription"),
+  };
+}
 
 export default function HumanizePage() {
   return <Humanizer />;

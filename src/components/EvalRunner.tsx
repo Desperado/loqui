@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useBrowserProfile } from "@/components/BrowserProfileProvider";
 
 interface ModelInfo {
   id: string;
@@ -39,6 +40,7 @@ interface PastRun {
 }
 
 export function EvalRunner() {
+  const { locale, t } = useBrowserProfile();
   const [models, setModels] = useState<ModelInfo[]>([]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [useJudge, setUseJudge] = useState(false);
@@ -132,16 +134,15 @@ export function EvalRunner() {
   return (
     <div className="space-y-4">
       <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-4 space-y-3">
-        <h2 className="font-semibold">Translation quality (chrF + LLM judge)</h2>
+        <h2 className="font-semibold">{t("evalTranslationTitle")}</h2>
         <p className="text-sm text-slate-500 dark:text-slate-400">
-          Runs the built-in DE→UK / EN→UK sentence set through the selected models. Scores each output
-          with chrF against a reference translation; optionally an LLM judge rates adequacy 1–5.
+          {t("evalTranslationHelp")}
         </p>
         <div className="flex flex-wrap gap-2">
           {models.map((m) => (
             <label
               key={m.id}
-              className={`flex items-center gap-2 text-sm rounded-lg border px-3 py-1.5 cursor-pointer ${
+              className={`flex min-h-11 items-center gap-2 text-sm rounded-lg border px-3 py-1.5 cursor-pointer ${
                 !m.enabled
                   ? "opacity-40 cursor-not-allowed"
                   : selected.has(m.id)
@@ -159,17 +160,17 @@ export function EvalRunner() {
             </label>
           ))}
         </div>
-        <div className="flex items-center gap-4">
-          <label className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
+          <label className="flex min-h-11 items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
             <input type="checkbox" checked={useJudge} onChange={(e) => setUseJudge(e.target.checked)} />
-            LLM-as-judge scoring (slower)
+            {t("judgeScoring")}
           </label>
           <button
             onClick={run}
             disabled={running || selected.size === 0}
-            className="ml-auto rounded-lg bg-indigo-600 text-white px-4 py-2 text-sm font-medium hover:bg-indigo-500 disabled:opacity-40"
+            className="min-h-11 rounded-lg bg-indigo-600 text-white px-4 py-2 text-sm font-medium hover:bg-indigo-500 disabled:opacity-40 sm:ml-auto"
           >
-            {running ? `Running… ${progress.done}/${progress.total || "…"}` : "Run eval"}
+            {running ? `${t("running")} ${progress.done}/${progress.total || "…"}` : t("runEval")}
           </button>
         </div>
         {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
@@ -177,16 +178,16 @@ export function EvalRunner() {
 
       {summary && (
         <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-4">
-          <h3 className="font-semibold mb-3">Summary</h3>
+          <h3 className="font-semibold mb-3">{t("summary")}</h3>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="text-left text-slate-400 dark:text-slate-500 border-b border-slate-100 dark:border-slate-700">
-                  <th className="py-2 pr-4">Model</th>
+                  <th className="py-2 pr-4">{t("model")}</th>
                   <th className="py-2 pr-4">avg chrF</th>
-                  <th className="py-2 pr-4">avg judge (1–5)</th>
-                  <th className="py-2 pr-4">avg latency</th>
-                  <th className="py-2">errors</th>
+                  <th className="py-2 pr-4">{t("averageJudge")}</th>
+                  <th className="py-2 pr-4">{t("averageLatency")}</th>
+                  <th className="py-2">{t("errors")}</th>
                 </tr>
               </thead>
               <tbody>
@@ -209,17 +210,17 @@ export function EvalRunner() {
 
       {results.length > 0 && (
         <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-4">
-          <h3 className="font-semibold mb-3">Per-item results</h3>
+          <h3 className="font-semibold mb-3">{t("itemResults")}</h3>
           <div className="overflow-x-auto max-h-96 overflow-y-auto">
             <table className="w-full text-xs">
               <thead className="sticky top-0 bg-white dark:bg-slate-800">
                 <tr className="text-left text-slate-400 dark:text-slate-500 border-b border-slate-100 dark:border-slate-700">
-                  <th className="py-2 pr-3">Model</th>
-                  <th className="py-2 pr-3">Source</th>
-                  <th className="py-2 pr-3">Output</th>
-                  <th className="py-2 pr-3">Reference</th>
+                  <th className="py-2 pr-3">{t("model")}</th>
+                  <th className="py-2 pr-3">{t("source")}</th>
+                  <th className="py-2 pr-3">{t("output")}</th>
+                  <th className="py-2 pr-3">{t("reference")}</th>
                   <th className="py-2 pr-3">chrF</th>
-                  <th className="py-2">judge</th>
+                  <th className="py-2">{t("judge")}</th>
                 </tr>
               </thead>
               <tbody>
@@ -241,7 +242,7 @@ export function EvalRunner() {
 
       {pastRuns.length > 0 && (
         <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-4">
-          <h3 className="font-semibold mb-3">Past runs</h3>
+          <h3 className="font-semibold mb-3">{t("pastRuns")}</h3>
           <div className="space-y-2 text-sm">
             {pastRuns.map((r) => {
               let parsed: { perModel?: Summary } = {};
@@ -253,20 +254,20 @@ export function EvalRunner() {
               return (
                 <div key={r.id} className="border border-slate-100 dark:border-slate-700 rounded-lg p-3">
                   <div className="text-xs text-slate-400 dark:text-slate-500 mb-1">
-                    {new Date(r.created_at).toLocaleString()}
+                    {new Date(r.created_at).toLocaleString(locale)}
                   </div>
                   {parsed.perModel ? (
                     <div className="flex flex-wrap gap-3">
                       {Object.entries(parsed.perModel).map(([model, s]) => (
                         <span key={model} className="text-slate-600 dark:text-slate-300">
                           <span className="font-medium">{modelLabel(model)}</span>: chrF {s.avgChrf ?? "—"}
-                          {s.avgJudge != null && ` · judge ${s.avgJudge}`}
+                          {s.avgJudge != null && ` · ${t("judge")} ${s.avgJudge}`}
                           {s.avgLatencyMs != null && ` · ${s.avgLatencyMs} ms`}
                         </span>
                       ))}
                     </div>
                   ) : (
-                    <span className="text-slate-400 dark:text-slate-500">in progress / incomplete</span>
+                    <span className="text-slate-400 dark:text-slate-500">{t("incomplete")}</span>
                   )}
                 </div>
               );

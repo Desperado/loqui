@@ -1,6 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { useBrowserProfile } from "@/components/BrowserProfileProvider";
+import { pluralKey } from "@/lib/i18n";
+import { isLang, LANG_FLAGS } from "@/lib/translate";
 
 interface Conversation {
   id: string;
@@ -22,6 +25,7 @@ interface Message {
 }
 
 export function HistoryBrowser() {
+  const { locale, t } = useBrowserProfile();
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -61,12 +65,12 @@ export function HistoryBrowser() {
     void load();
   };
 
-  if (loading) return <p className="text-slate-400 dark:text-slate-500 text-sm">Loading history…</p>;
+  if (loading) return <p className="text-slate-400 dark:text-slate-500 text-sm">{t("loadingHistory")}</p>;
 
   if (conversations.length === 0) {
     return (
       <p className="text-slate-500 dark:text-slate-400 text-sm">
-        No saved sessions yet. Translate something on the demo page with “Save to history” enabled.
+        {t("noSavedSessions")}
       </p>
     );
   }
@@ -91,33 +95,36 @@ export function HistoryBrowser() {
                   e.stopPropagation();
                   void remove(c.id);
                 }}
-                className="opacity-0 group-hover:opacity-100 text-slate-400 dark:text-slate-500 hover:text-red-500 dark:hover:text-red-400"
-                title="Delete conversation"
+                className="min-h-11 min-w-11 text-slate-400 hover:text-red-500 dark:text-slate-500 dark:hover:text-red-400 sm:min-h-0 sm:min-w-0 sm:opacity-0 sm:group-hover:opacity-100"
+                title={t("deleteConversation")}
+                aria-label={t("deleteConversation")}
               >
                 ✕
               </button>
             </div>
             <div className="text-xs text-slate-400 dark:text-slate-500 mt-1">
-              {c.message_count} messages · {new Date(c.created_at).toLocaleDateString()}
+              {c.message_count}{" "}
+              {t(pluralKey("message", locale, c.message_count))}{" "}
+              · {new Date(c.created_at).toLocaleDateString(locale)}
             </div>
           </div>
         ))}
       </div>
       <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-4 min-h-64">
         {!selected ? (
-          <p className="text-slate-400 dark:text-slate-500 text-sm">Select a session to view its transcript.</p>
+          <p className="text-slate-400 dark:text-slate-500 text-sm">{t("selectSession")}</p>
         ) : (
           <div className="space-y-3">
             {messages.map((m) => (
               <div key={m.id} className="border-b border-slate-100 dark:border-slate-700 pb-3 last:border-0">
                 <p className="text-slate-500 dark:text-slate-400 text-sm">
-                  {m.source_lang === "de" ? "🇩🇪" : "🇬🇧"} {m.source_text}
+                  {isLang(m.source_lang) ? LANG_FLAGS[m.source_lang] : "🌐"} {m.source_text}
                 </p>
-                <p className="text-slate-900 dark:text-slate-100">🇺🇦 {m.translated_text}</p>
+                <p className="text-slate-900 dark:text-slate-100">↳ {m.translated_text}</p>
                 <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-1">
                   {m.model}
                   {m.latency_ms != null ? ` · ${m.latency_ms} ms` : ""} ·{" "}
-                  {new Date(m.created_at).toLocaleTimeString()}
+                  {new Date(m.created_at).toLocaleTimeString(locale)}
                 </p>
               </div>
             ))}
