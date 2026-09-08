@@ -45,6 +45,7 @@ describe("Loqui MCP tools", () => {
         max_characters: 100,
         preserve_terms: ["Acme Corp"],
         avoid: ["em_dash", "double_dash"],
+        writing_sample: "I prefer short, direct sentences.",
       },
     });
 

@@ -1,6 +1,6 @@
 # 🎙️ Loqui
 
-Loqui includes a **Humanize** writing workspace at `/humanize`: a meaning-preserving rewrite tool with conversational, crisp, warm, and polished voices. The same validated engine is available to AI agents through a local MCP server. It reuses the existing Groq and Cerebras model routing; configure either provider key as usual.
+Loqui includes a **Humanize** writing workspace at `/humanize`: a meaning-preserving rewrite tool with conversational, crisp, warm, and polished voices, plus optional writing-sample matching. A compact editorial rubric removes recurring AI-writing patterns, while deterministic checks protect facts and intent. The same validated engine is available to AI agents through a local MCP server. It reuses the existing Groq and Cerebras model routing; configure either provider key as usual.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Next.js](https://img.shields.io/badge/Next.js-15-black)](https://nextjs.org/)
@@ -82,6 +82,20 @@ npm run mcp
 See [docs/mcp.md](docs/mcp.md) for client configuration, complete schemas, examples, privacy
 behavior, and troubleshooting.
 
+## Humanizer evaluation
+
+With Groq or Cerebras configured, run the built-in reference set against each enabled
+humanization model:
+
+```bash
+npm run eval:humanizer
+```
+
+The command compares the same prompt with and without the adapted rubric, then writes a local
+JSON record under `data/evals/`. Each model/variant summary includes reference chrF,
+fact-preservation and editorial pass rates, errors, and end-to-end latency. Use
+`npm run eval:humanizer -- --output path/to/report.json` to select another output path.
+
 ## Deployment (Railway)
 
 Loqui ships with `railway.json` (Nixpacks). To deploy:
@@ -102,6 +116,7 @@ npm run build    # production build
 npm start        # run the production build
 npm run lint     # lint
 npm run mcp      # local stdio MCP server
+npm run eval:humanizer # baseline-vs-rubric quality and latency record
 npm test         # unit and MCP integration tests
 npm run typecheck
 ```
@@ -114,3 +129,5 @@ Contributions are welcome — see [CONTRIBUTING.md](CONTRIBUTING.md) and our
 ## License
 
 [MIT](LICENSE) © Ruslan Strazhnyk
+
+See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for adapted third-party material.

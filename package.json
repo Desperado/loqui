@@ -31,6 +31,7 @@
     "start": "next start",
     "lint": "next lint",
     "mcp": "tsx src/mcp/stdio.ts",
+    "eval:humanizer": "tsx scripts/evaluate-humanizer.ts",
     "test": "vitest run",
     "test:unit": "vitest run tests/unit",
     "test:integration": "vitest run tests/integration",
