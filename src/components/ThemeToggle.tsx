@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useBrowserProfile } from "@/components/BrowserProfileProvider";
 
 type Theme = "light" | "dark" | "system";
 
@@ -25,10 +26,10 @@ function apply(theme: Theme) {
   document.documentElement.classList.toggle("dark", dark);
 }
 
-const OPTIONS: { value: Theme; label: string; icon: React.ReactNode }[] = [
+const OPTIONS: { value: Theme; label: "light" | "system" | "dark"; icon: React.ReactNode }[] = [
   {
     value: "light",
-    label: "Light",
+    label: "light",
     icon: (
       <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
         <circle cx="12" cy="12" r="4" />
@@ -38,7 +39,7 @@ const OPTIONS: { value: Theme; label: string; icon: React.ReactNode }[] = [
   },
   {
     value: "system",
-    label: "System",
+    label: "system",
     icon: (
       <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
         <rect x="2" y="3" width="20" height="14" rx="2" />
@@ -48,7 +49,7 @@ const OPTIONS: { value: Theme; label: string; icon: React.ReactNode }[] = [
   },
   {
     value: "dark",
-    label: "Dark",
+    label: "dark",
     icon: (
       <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
         <path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z" />
@@ -58,6 +59,7 @@ const OPTIONS: { value: Theme; label: string; icon: React.ReactNode }[] = [
 ];
 
 export function ThemeToggle() {
+  const { t } = useBrowserProfile();
   const [theme, setTheme] = useState<Theme>("system");
   const [mounted, setMounted] = useState(false);
 
@@ -86,7 +88,7 @@ export function ThemeToggle() {
     <div
       className="inline-flex items-center gap-0.5 rounded-lg border border-slate-200 bg-slate-100 p-0.5 dark:border-slate-700 dark:bg-slate-800"
       role="group"
-      aria-label="Color theme"
+      aria-label={t("theme")}
       // Avoid a hydration mismatch: the active pill depends on client-only storage.
       suppressHydrationWarning
     >
@@ -98,15 +100,15 @@ export function ThemeToggle() {
             type="button"
             onClick={() => select(opt.value)}
             aria-pressed={active}
-            title={opt.label}
-            className={`inline-flex items-center justify-center rounded-md p-1.5 transition-colors ${
+            title={t(opt.label)}
+            className={`inline-flex min-h-11 min-w-11 items-center justify-center rounded-md p-1.5 transition-colors sm:min-h-0 sm:min-w-0 ${
               active
                 ? "bg-white text-indigo-600 shadow-sm dark:bg-slate-950 dark:text-indigo-400"
                 : "text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-100"
             }`}
           >
             {opt.icon}
-            <span className="sr-only">{opt.label}</span>
+            <span className="sr-only">{t(opt.label)}</span>
           </button>
         );
       })}

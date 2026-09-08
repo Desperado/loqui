@@ -2,6 +2,8 @@
 // OpenAI's gpt-4o-mini-tts model — persona selection is just picking which
 // one to send, no extra provider needed.
 
+import type { TranslationKey } from "@/lib/i18n";
+
 export const OPENAI_TTS_VOICES = [
   "alloy",
   "ash",
@@ -19,15 +21,15 @@ export const OPENAI_TTS_VOICES = [
 export type OpenAiTtsVoice = (typeof OPENAI_TTS_VOICES)[number];
 
 export interface VoicePersona {
-  id: string;
-  label: string;
+  id: "woman" | "man" | "other";
+  labelKey: Extract<TranslationKey, "female" | "male" | "neutral">;
   voice: OpenAiTtsVoice;
 }
 
-export const VOICE_PERSONAS: VoicePersona[] = [
-  { id: "woman", label: "Female", voice: "nova" },
-  { id: "man", label: "Male", voice: "onyx" },
-  { id: "other", label: "Neutral", voice: "alloy" },
+export const VOICE_PERSONAS: readonly VoicePersona[] = [
+  { id: "woman", labelKey: "female", voice: "nova" },
+  { id: "man", labelKey: "male", voice: "onyx" },
+  { id: "other", labelKey: "neutral", voice: "alloy" },
 ];
 
 export const DEFAULT_PERSONA_ID = "woman";

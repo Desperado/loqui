@@ -1,5 +1,6 @@
 import { auth, signIn } from "@/auth";
 import { HistoryBrowser } from "@/components/HistoryBrowser";
+import { LocalizedText } from "@/components/BrowserProfileProvider";
 
 export default async function HistoryPage() {
   const session = await auth();
@@ -7,9 +8,9 @@ export default async function HistoryPage() {
   if (!session?.user) {
     return (
       <div className="max-w-md mx-auto text-center space-y-4 pt-16">
-        <h1 className="text-xl font-bold">Chat history</h1>
+        <h1 className="text-xl font-bold"><LocalizedText id="chatHistory" /></h1>
         <p className="text-slate-500 dark:text-slate-400 text-sm">
-          Sign in with GitHub to save and browse your translation sessions.
+          <LocalizedText id="historySignIn" />
         </p>
         <form
           action={async () => {
@@ -17,8 +18,8 @@ export default async function HistoryPage() {
             await signIn("github");
           }}
         >
-          <button className="rounded-md bg-slate-900 text-white px-4 py-2 text-sm hover:bg-slate-700">
-            Sign in with GitHub
+          <button className="min-h-11 rounded-md bg-slate-900 px-4 py-2 text-sm text-white hover:bg-slate-700">
+            <LocalizedText id="signIn" />
           </button>
         </form>
       </div>
@@ -27,7 +28,7 @@ export default async function HistoryPage() {
 
   return (
     <div className="space-y-4">
-      <h1 className="text-xl font-bold">Chat history</h1>
+      <h1 className="text-xl font-bold"><LocalizedText id="chatHistory" /></h1>
       <HistoryBrowser />
     </div>
   );
