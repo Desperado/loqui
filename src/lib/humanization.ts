@@ -269,7 +269,7 @@ function missingRhetoricalContrastTerms(original: string, rewritten: string): st
   const missing: string[] = [];
   const stopWords = new Set(["about", "also", "being", "just", "merely", "only", "that", "the", "this", "with"]);
   const pattern = /\bnot (?:just|only|merely)\s+([^,;.!?\n]{1,80}?),?\s+but(?:\s+also)?\s+([^.;!?\n]{1,80})/giu;
-  const rewrittenWords = new Set(rewritten.toLocaleLowerCase().match(/[\p{L}\p{N}]+/gu) ?? []);
+  const rewrittenWords = new Set(rewritten.toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? []);
 
   for (const match of original.matchAll(pattern)) {
     const terms = `${match[1]} ${match[2]}`
