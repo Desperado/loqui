@@ -68,7 +68,7 @@ export function createLoquiMcpServer(
     {
       title: "Humanize text",
       description:
-        "Rewrite text naturally within a character limit while preserving facts and exact protected values.",
+        "Rewrite text naturally within a character limit, optionally matching a writing sample, while preserving facts and exact protected values.",
       inputSchema: humanizeRequestSchema,
       outputSchema: humanizeOutputSchema,
     },

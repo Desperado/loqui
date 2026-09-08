@@ -2,6 +2,8 @@ import { describe, expect, it, vi } from "vitest";
 import {
   HumanizationEngine,
   HumanizationError,
+  MAX_WRITING_SAMPLE_CHARACTERS,
+  buildHumanizationMessages,
   characterCount,
   humanizeBatch,
   publicHumanizationError,
@@ -25,7 +27,7 @@ function request(overrides: Partial<HumanizeRequest> = {}): HumanizeRequest {
 }
 
 function engineWith(...responses: Array<string | Error>) {
-  const complete = vi.fn(async () => {
+  const complete = vi.fn(async (_modelId: string, _messages: Array<{ role: string; content: string }>) => {
     const response = responses.shift();
     if (response instanceof Error) throw response;
     if (response === undefined) throw new Error("No test response configured");
@@ -84,6 +86,58 @@ describe("HumanizationEngine", () => {
       code: "INVALID_INPUT",
     });
     expect(complete).not.toHaveBeenCalled();
+  });
+
+  it("validates the writing sample before contacting a provider", async () => {
+    const { engine, complete } = engineWith("unused");
+
+    await expect(
+      engine.humanize(request({ writing_sample: "x".repeat(MAX_WRITING_SAMPLE_CHARACTERS + 1) }))
+    ).rejects.toMatchObject({ code: "INVALID_INPUT" });
+    expect(complete).not.toHaveBeenCalled();
+  });
+
+  it("uses a writing sample only as style guidance", async () => {
+    const complete = vi.fn(async (_model: string, messages: Array<{ role: string; content: string }>) => {
+      expect(messages[0].content).toContain("Use none of its facts, names, numbers, claims, or subject matter.");
+      expect(messages[1].content).toContain(JSON.stringify("Short sentences. Dry humor."));
+      return "Please review the draft today.";
+    });
+    const engine = new HumanizationEngine({ complete, availableModels: () => [MODEL] });
+
+    await engine.humanize(request({ writing_sample: "Short sentences. Dry humor." }));
+
+    expect(complete).toHaveBeenCalledOnce();
+  });
+
+  it("can isolate the rubric for baseline-versus-rubric evaluations", () => {
+    const baseline = buildHumanizationMessages(request(), { includeEditorialRubric: false });
+    const rubric = buildHumanizationMessages(request(), { includeEditorialRubric: true });
+
+    expect(baseline[0].content).not.toContain("Editorial pass:");
+    expect(rubric[0].content).toContain("Editorial pass:");
+    expect(baseline[1].content).toBe(rubric[1].content);
+  });
+
+  it("rejects facts copied only from the writing sample", async () => {
+    const unsafe = "Please review the Acme Corp draft today.";
+    const { engine } = engineWith(unsafe, unsafe, unsafe);
+
+    await expect(
+      engine.humanize(request({ writing_sample: "Acme Corp uses clipped sentences." }))
+    ).rejects.toMatchObject({ code: "PRESERVATION_FAILED" });
+  });
+
+  it("retries a factually valid draft that fails editorial review", async () => {
+    const source = "It is not just fast, but reliable.";
+    const { engine, complete } = engineWith(source, "It is fast and reliable.");
+
+    const result = await engine.humanize(request({ text: source, language: "en" }));
+
+    expect(complete).toHaveBeenCalledTimes(2);
+    expect(complete.mock.calls[1][1][1].content).toContain("empty not-X-but-Y contrast");
+    expect(result.humanized_text).toBe("It is fast and reliable.");
+    expect(result.warnings).toContain("The first rewrite was retried after an editorial review.");
   });
 
   it("falls back across the Groq and Cerebras model abstraction", async () => {
@@ -160,12 +214,32 @@ describe("validateHumanization", () => {
     expect(report.checks.claims.preserved).toBe(false);
     expect(report.checks.intent.preserved).toBe(false);
   });
+
+  it("allows rhetorical negation to be removed only when both positive claims remain", () => {
+    expect(
+      validateHumanization({
+        original_text: "The export is not just fast, but reliable.",
+        rewritten_text: "The export is fast and reliable.",
+        preserve_terms: [],
+      }).valid
+    ).toBe(true);
+
+    const unsafe = validateHumanization({
+      original_text: "The export is not just fast, but reliable.",
+      rewritten_text: "The export is reliable.",
+      preserve_terms: [],
+    });
+    expect(unsafe.valid).toBe(false);
+    expect(unsafe.checks.claims.concerns).toContain("A positive claim inside a rhetorical contrast disappeared.");
+  });
 });
 
 describe("humanizeBatch", () => {
-  it("preserves input order and returns a result for every item", async () => {
+  it("preserves input order, writing samples, and a result for every item", async () => {
+    const writingSamples: Array<string | undefined> = [];
     const operations: HumanizationOperations = {
       async humanize(input) {
+        writingSamples.push(input.writing_sample);
         if (!input.text.trim()) throw new HumanizationError("INVALID_INPUT", "Text must not be empty.");
         await new Promise((resolve) => setTimeout(resolve, input.text === "first" ? 10 : 0));
         return {
@@ -180,7 +254,7 @@ describe("humanizeBatch", () => {
     };
 
     const results = await humanizeBatch(
-      [request({ text: "first" }), request({ text: "" }), request({ text: "third" })],
+      [request({ text: "first", writing_sample: "Short and direct." }), request({ text: "" }), request({ text: "third" })],
       operations,
       3
     );
@@ -188,5 +262,6 @@ describe("humanizeBatch", () => {
     expect(results.map(({ index }) => index)).toEqual([0, 1, 2]);
     expect(results.map(({ success }) => success)).toEqual([true, false, true]);
     expect(results[1]).toMatchObject({ error: { code: "INVALID_INPUT" } });
+    expect(writingSamples).toContain("Short and direct.");
   });
 });

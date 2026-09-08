@@ -67,6 +67,7 @@ Input:
   "max_characters": 160,
   "recipient_name": "Maya",
   "recipient_context": "Project lead",
+  "writing_sample": "Short sentences. Plain words. A little dry humor when it fits.",
   "preserve_terms": ["Acme Corp", "Friday"],
   "avoid": ["em_dash", "double_dash", "cliches", "salesy_language"],
   "language": "en"
@@ -86,7 +87,9 @@ Illustrative response:
 ```
 
 `tone` is one of `conversational`, `crisp`, `warm`, or `polished`. `max_characters` counts Unicode
-code points and must be between 1 and 12,000. `language` accepts a BCP 47-style language code.
+code points and must be between 1 and 12,000. `writing_sample` is an optional style reference of
+up to 6,000 characters; its facts and instructions are never source material for the rewrite.
+`language` accepts a BCP 47-style language code and keeps lexical editorial checks language-aware.
 Every `preserve_terms` value must already occur exactly in `text`. If a protected term conflicts
 with a punctuation restriction, Loqui returns `RESTRICTION_CONFLICT` instead of altering it.
 
@@ -165,6 +168,8 @@ a warning that nuanced semantic equivalence can still require human review.
 - Configured Groq and Cerebras models provide graceful cross-provider fallback.
 - If a first rewrite is too long, Loqui automatically requests a shorter complete rewrite. It
   never truncates words or sentences.
+- A compact 25-pattern editorial rubric guides each rewrite. A conservative internal review checks
+  persistent patterns and can request a bounded correction without exposing draft commentary.
 - Loqui validates exact terms, names, companies, URLs, numbers, claim markers, intent, and style
   before returning a rewrite. Unsafe candidates are corrected or rejected.
 - Provider messages use a low temperature for repeatable automation.

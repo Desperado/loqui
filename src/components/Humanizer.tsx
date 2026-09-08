@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { ModelSelector, type ModelInfo } from "@/components/ModelSelector";
 import { useBrowserProfile } from "@/components/BrowserProfileProvider";
 import { pluralKey } from "@/lib/i18n";
+import { MAX_WRITING_SAMPLE_CHARACTERS } from "@/lib/humanizerRubric";
 
 type Style = "casual" | "crisp" | "warm" | "polished";
 
@@ -18,6 +19,7 @@ export function Humanizer() {
   const [models, setModels] = useState<ModelInfo[]>([]);
   const [model, setModel] = useState("");
   const [text, setText] = useState<string>(starters.en);
+  const [writingSample, setWritingSample] = useState("");
   const [result, setResult] = useState("");
   const [style, setStyle] = useState<Style>("casual");
   const [working, setWorking] = useState(false);
@@ -60,7 +62,13 @@ export function Humanizer() {
       const response = await fetch("/api/humanize", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text, style, model }),
+        body: JSON.stringify({
+          text,
+          style,
+          model,
+          language: locale,
+          writing_sample: writingSample.trim() || undefined,
+        }),
       });
       if (!response.ok || !response.body) throw new Error((await response.text()) || "The rewrite could not start.");
       const reader = response.body.getReader();
@@ -110,6 +118,25 @@ export function Humanizer() {
             <div className="whitespace-pre-wrap text-sm leading-7 text-slate-700 dark:text-slate-200">{working && !result ? <span className="text-slate-400">{t("findingWords")}</span> : result || <span className="text-slate-400">{t("revisedPlaceholder")}</span>}</div>
           </article>
         </div>
+        <details className="border-t border-slate-200 bg-white px-4 py-3 dark:border-slate-800 dark:bg-slate-900">
+          <summary className="min-h-11 cursor-pointer select-none py-3 text-sm font-semibold text-slate-700 dark:text-slate-200">
+            {t("matchVoice")}
+          </summary>
+          <div className="pb-2">
+            <p className="mb-2 text-xs leading-5 text-slate-500 dark:text-slate-400">{t("matchVoiceHint")}</p>
+            <textarea
+              value={writingSample}
+              onChange={(event) => setWritingSample(event.target.value)}
+              maxLength={MAX_WRITING_SAMPLE_CHARACTERS}
+              className="min-h-32 w-full resize-y rounded-lg border border-slate-200 bg-slate-50 p-3 text-base leading-6 outline-none focus:border-violet-400 dark:border-slate-700 dark:bg-slate-950 sm:text-sm"
+              placeholder={t("voiceSamplePlaceholder")}
+              aria-label={t("matchVoice")}
+            />
+            <p className="mt-1 text-right text-[10px] text-slate-400">
+              {writingSample.length}/{MAX_WRITING_SAMPLE_CHARACTERS}
+            </p>
+          </div>
+        </details>
         <div className="flex flex-col gap-4 border-t border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-950/40 sm:flex-row sm:items-center sm:justify-between">
           <div className="grid grid-cols-2 gap-2 sm:flex">
             {styles.map((option) => <button key={option.id} onClick={() => setStyle(option.id)} className={`rounded-lg border px-3 py-2 text-left transition ${style === option.id ? "border-violet-500 bg-violet-100 text-violet-950 dark:bg-violet-950/50 dark:text-violet-100" : "border-slate-200 bg-white text-slate-600 hover:border-violet-300 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300"}`}><span className="block text-xs font-semibold">{option.name}</span><span className="block text-[10px] opacity-70">{option.hint}</span></button>)}

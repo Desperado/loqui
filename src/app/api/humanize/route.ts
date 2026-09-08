@@ -9,7 +9,7 @@ const styles = new Set<HumanizeStyle>(["casual", "crisp", "warm", "polished"]);
 
 /** POST /api/humanize — return a validated, meaning-preserving writing rewrite. */
 export async function POST(req: NextRequest) {
-  let body: { text?: string; style?: string; model?: string };
+  let body: { text?: string; style?: string; model?: string; writing_sample?: string; language?: string };
   try {
     body = await req.json();
   } catch {
@@ -37,8 +37,10 @@ export async function POST(req: NextRequest) {
         text,
         tone: style === "casual" ? "conversational" : style,
         max_characters: 12_000,
+        writing_sample: body.writing_sample,
         preserve_terms: [],
         avoid: [],
+        language: body.language,
       },
       { preferredModel: modelId || undefined, signal: req.signal }
     );
