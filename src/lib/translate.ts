@@ -59,8 +59,13 @@ export interface ChatOptions {
   signal?: AbortSignal;
   temperature?: number;
   maxTokens?: number;
-  /** Per-attempt deadline. The default is deliberately short enough for agent workflows. */
+  /** Deadline for establishing a provider response. Short enough for agent workflows. */
   timeoutMs?: number;
+  /**
+   * Once streaming starts, the deadline is re-armed after every chunk so it bounds
+   * the gap between chunks instead of the total length of the translation.
+   */
+  stallTimeoutMs?: number;
   /** Retries only transient provider/network failures. */
   retries?: number;
   retryDelayMs?: number;
@@ -83,12 +88,20 @@ export class ProviderRequestError extends Error {
 
 function attemptSignal(signal: AbortSignal | undefined, timeoutMs: number) {
   const controller = new AbortController();
-  const timer = setTimeout(
-    () => controller.abort(new DOMException("Provider request timed out", "TimeoutError")),
-    timeoutMs
-  );
+  const abort = () =>
+    controller.abort(new DOMException("Provider request timed out", "TimeoutError"));
+  let timer = setTimeout(abort, timeoutMs);
   const combined = signal ? AbortSignal.any([signal, controller.signal]) : controller.signal;
-  return { signal: combined, cleanup: () => clearTimeout(timer), timedOut: () => controller.signal.aborted };
+  return {
+    signal: combined,
+    /** Re-arm the deadline, so a healthy stream is never cut off mid-translation. */
+    extend: (ms: number) => {
+      clearTimeout(timer);
+      timer = setTimeout(abort, ms);
+    },
+    cleanup: () => clearTimeout(timer),
+    timedOut: () => controller.signal.aborted,
+  };
 }
 
 async function retryDelay(ms: number, signal?: AbortSignal) {
@@ -119,7 +132,11 @@ function providerRequest(
   const provider = PROVIDERS[spec.provider];
   const apiKey = process.env[provider.envKey];
   if (!apiKey) {
-    throw new Error(`Missing ${provider.envKey} for provider ${provider.label}`);
+    // Not retryable: no number of attempts conjures up a missing key.
+    throw new ProviderRequestError(
+      `${provider.label} is not configured (missing ${provider.envKey})`,
+      false
+    );
   }
   return new Request(`${provider.baseUrl}/chat/completions`, {
     method: "POST",
@@ -143,7 +160,7 @@ async function fetchProvider(
   messages: ChatMessage[],
   stream: boolean,
   opts: ChatOptions
-): Promise<{ response: Response; cleanup: () => void }> {
+): Promise<{ response: Response; deadline: ReturnType<typeof attemptSignal> }> {
   const retries = Math.max(0, opts.retries ?? 1);
   const timeoutMs = Math.max(1, opts.timeoutMs ?? 15_000);
   let lastError: ProviderRequestError | undefined;
@@ -152,7 +169,7 @@ async function fetchProvider(
     const deadline = attemptSignal(opts.signal, timeoutMs);
     try {
       const response = await fetch(providerRequest(spec, messages, stream, opts, deadline.signal));
-      if (response.ok) return { response, cleanup: deadline.cleanup };
+      if (response.ok) return { response, deadline };
 
       const retryable = RETRYABLE_STATUS.has(response.status);
       response.body?.cancel().catch(() => undefined);
@@ -165,6 +182,12 @@ async function fetchProvider(
       if (opts.signal?.aborted) {
         deadline.cleanup();
         throw new ProviderRequestError("Request cancelled", false);
+      }
+      // A configuration error is final — surface it instead of retrying it into
+      // a vague "temporarily unavailable".
+      if (error instanceof ProviderRequestError && !error.retryable) {
+        deadline.cleanup();
+        throw error;
       }
       lastError = new ProviderRequestError(
         deadline.timedOut() ? `${spec.label} request timed out` : `${spec.label} is temporarily unavailable`,
@@ -192,11 +215,16 @@ export async function* streamChat(
   const spec = getModel(modelId);
   if (!spec) throw new Error(`Unknown model: ${modelId}`);
 
-  const { response: res, cleanup } = await fetchProvider(spec, messages, true, opts);
+  const { response: res, deadline } = await fetchProvider(spec, messages, true, opts);
   if (!res.body) {
-    cleanup();
+    deadline.cleanup();
     throw new ProviderRequestError(`${spec.label} returned an empty response`, true);
   }
+
+  // The connect deadline must not double as a budget for the whole translation:
+  // re-arm it on every chunk so it only catches a provider that goes silent.
+  const stallMs = Math.max(1, opts.stallTimeoutMs ?? opts.timeoutMs ?? 15_000);
+  deadline.extend(stallMs);
 
   const reader = res.body.getReader();
   const decoder = new TextDecoder();
@@ -205,6 +233,7 @@ export async function* streamChat(
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
+      deadline.extend(stallMs);
       buffer += decoder.decode(value, { stream: true });
       const lines = buffer.split("\n");
       buffer = lines.pop() ?? "";
@@ -224,7 +253,7 @@ export async function* streamChat(
     }
   } finally {
     reader.releaseLock();
-    cleanup();
+    deadline.cleanup();
   }
 }
 
@@ -237,7 +266,7 @@ export async function completeChat(
   const spec = getModel(modelId);
   if (!spec) throw new Error(`Unknown model: ${modelId}`);
 
-  const { response: res, cleanup } = await fetchProvider(spec, messages, false, opts);
+  const { response: res, deadline } = await fetchProvider(spec, messages, false, opts);
   try {
     const json = await res.json();
     const content = json.choices?.[0]?.message?.content;
@@ -249,7 +278,7 @@ export async function completeChat(
     if (error instanceof ProviderRequestError) throw error;
     throw new ProviderRequestError(`${spec.label} returned an invalid response`, true);
   } finally {
-    cleanup();
+    deadline.cleanup();
   }
 }
 
