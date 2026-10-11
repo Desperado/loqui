@@ -1,0 +1,7 @@
+User-agent: *
+Allow: /
+Disallow: /api/
+Disallow: /history
+Disallow: /display
+
+Sitemap: https://loqui.tools/sitemap.xml
