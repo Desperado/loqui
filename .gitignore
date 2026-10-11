@@ -10,3 +10,7 @@ data/
 *.tsbuildinfo
 next-env.d.ts
 __pycache__/
+
+# Generated IndexNow ownership files (never commit credentials)
+/public/indexnow-key.txt
+/public/indexnow-deployment.txt

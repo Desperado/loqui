@@ -35,7 +35,8 @@
     "test": "vitest run",
     "test:unit": "vitest run tests/unit",
     "test:integration": "vitest run tests/integration",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "prebuild": "node scripts/indexnow.mjs prepare"
   },
   "dependencies": {
     "@modelcontextprotocol/server": "^2.0.0",
